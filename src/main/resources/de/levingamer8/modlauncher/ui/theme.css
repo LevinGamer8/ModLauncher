@@ -1,0 +1,95 @@
+/* Nexomaker-ish: dunkler Hintergrund, weiche Cards, klare Inputs, Accent */
+
+.root {
+    -fx-font-family: "Inter", "Segoe UI", system-ui;
+    -fx-background-color: #0b0f14;
+}
+
+/* Allgemeine Textfarben */
+.label, .text {
+    -fx-text-fill: #e6edf6;
+}
+
+#statusLabel {
+    -fx-text-fill: #9fb0c3;
+}
+
+/* Top area Hintergrund */
+.top {
+    -fx-background-color: transparent;
+}
+
+/* Cards: gib VBox/HBox die styleClass "card" */
+.card {
+    -fx-background-color: rgba(255,255,255,0.04);
+    -fx-background-radius: 14;
+    -fx-border-radius: 14;
+    -fx-border-color: rgba(255,255,255,0.08);
+    -fx-border-width: 1;
+    -fx-padding: 14;
+}
+
+/* Inputs */
+.text-field, .combo-box, .choice-box {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-border-color: rgba(255,255,255,0.12);
+    -fx-text-fill: #e6edf6;
+    -fx-prompt-text-fill: rgba(230,237,246,0.45);
+}
+
+.text-field:focused, .combo-box:focused {
+    -fx-border-color: rgba(43, 255, 195, 0.7);
+}
+
+/* Buttons */
+.button {
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-padding: 10 14 10 14;
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(255,255,255,0.10);
+    -fx-border-width: 1;
+    -fx-text-fill: #e6edf6;
+}
+
+.button:hover {
+    -fx-background-color: rgba(255,255,255,0.09);
+}
+
+.button:pressed {
+    -fx-background-color: rgba(255,255,255,0.12);
+}
+
+/* Primärbutton: gib ihm styleClass "primary" */
+.button.primary {
+    -fx-background-color: linear-gradient(to right, #13f3b2, #33c3ff);
+    -fx-text-fill: #071018;
+    -fx-font-weight: bold;
+    -fx-border-color: transparent;
+}
+
+/* ProgressBar */
+.progress-bar {
+    -fx-background-radius: 10;
+}
+.progress-bar .track {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-background-radius: 10;
+}
+.progress-bar .bar {
+    -fx-background-radius: 10;
+}
+
+/* Log area */
+.text-area {
+    -fx-background-color: rgba(255,255,255,0.03);
+    -fx-background-radius: 14;
+    -fx-border-radius: 14;
+    -fx-border-color: rgba(255,255,255,0.06);
+    -fx-text-fill: #e6edf6;
+}
+.text-area .content {
+    -fx-background-color: transparent;
+}

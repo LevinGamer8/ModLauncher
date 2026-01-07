@@ -1,0 +1,97 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>de.levingamer8</groupId>
+    <artifactId>modlauncher</artifactId>
+    <version>1.0.0</version>
+    <name>ModLauncher</name>
+
+    <properties>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <javafx.version>21.0.4</javafx.version>
+        <jackson.version>2.17.2</jackson.version>
+    </properties>
+
+    <repositories>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+    </repositories>
+
+    <dependencies>
+        <!-- JavaFX -->
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-controls</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.openjfx</groupId>
+            <artifactId>javafx-fxml</artifactId>
+            <version>${javafx.version}</version>
+        </dependency>
+
+        <!-- JSON -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <!-- Modern JavaFX Theme (Maven Central) -->
+        <dependency>
+            <groupId>io.github.mkpaz</groupId>
+            <artifactId>atlantafx-base</artifactId>
+            <version>2.1.0</version>
+        </dependency>
+
+        <!-- NBT (Maven Central) -->
+        <dependency>
+            <groupId>io.github.canary-prism</groupId>
+            <artifactId>querz-nbt</artifactId>
+            <version>6.2.1</version>
+        </dependency>
+
+        <!-- Microsoft Login (JitPack) -->
+        <dependency>
+            <groupId>com.github.Litarvan</groupId>
+            <artifactId>OpenAuth</artifactId>
+            <version>1.1.6</version>
+        </dependency>
+
+
+        <!-- Minecraft + Forge installieren -->
+        <dependency>
+            <groupId>fr.flowarg</groupId>
+            <artifactId>flowupdater</artifactId>
+            <version>1.9.3</version>
+        </dependency>
+
+        <!-- Minecraft starten -->
+        <dependency>
+            <groupId>fr.flowarg</groupId>
+            <artifactId>openlauncherlib</artifactId>
+            <version>3.2.11</version>
+        </dependency>
+
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- JavaFX Maven Plugin -->
+            <plugin>
+                <groupId>org.openjfx</groupId>
+                <artifactId>javafx-maven-plugin</artifactId>
+                <version>0.0.8</version>
+                <configuration>
+                    <mainClass>de.levingamer8.modlauncher.Main</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

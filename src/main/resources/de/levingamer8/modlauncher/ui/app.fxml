@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="de.levingamer8.modlauncher.ui.Controller">
+
+    <top>
+        <VBox spacing="10" BorderPane.alignment="CENTER" style="-fx-padding: 14;" styleClass="card">
+            <Label text="ModLauncher (Updater MVP)" style="-fx-font-size: 18; -fx-font-weight: bold;"/>
+            <GridPane hgap="10" vgap="10">
+                <columnConstraints>
+                    <ColumnConstraints percentWidth="18"/>
+                    <ColumnConstraints percentWidth="82"/>
+                </columnConstraints>
+
+                <Label text="Manifest URL:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
+                <TextField fx:id="manifestUrlField" GridPane.rowIndex="0" GridPane.columnIndex="1"
+                           promptText="https://deinserver.tld/pack/manifest.json"/>
+
+                <Label text="Profil:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
+                <HBox spacing="8" GridPane.rowIndex="1" GridPane.columnIndex="1">
+                    <ComboBox fx:id="profileCombo" prefWidth="420"/>
+                    <Button text="Neu" onAction="#onNewProfile"/>
+                    <Button text="Löschen" onAction="#onDeleteProfile"/>
+                </HBox>
+            </GridPane>
+
+            <HBox spacing="10">
+                <Button fx:id="updateButton" text="Update / Installieren" onAction="#onUpdate" styleClass="primary"/>
+                <Button fx:id="openFolderButton" text="Instanzordner öffnen" onAction="#onOpenFolder" />
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="statusLabel" text="Bereit"/>
+            </HBox>
+
+            <HBox spacing="10">
+                <Label text="Name:" styleClass="muted"/>
+                <TextField fx:id="playerNameField" prefWidth="180" promptText="Noah"/>
+                <Button fx:id="playButton" text="Start" onAction="#onPlay" styleClass="primary"/>
+            </HBox>
+
+
+            <ProgressBar fx:id="progressBar" prefWidth="9999" progress="0"/>
+        </VBox>
+    </top>
+
+    <center>
+        <TextArea fx:id="logArea" editable="false" wrapText="false" style="-fx-font-family: 'Consolas';"/>
+    </center>
+
+</BorderPane>
