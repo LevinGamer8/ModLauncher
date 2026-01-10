@@ -18,7 +18,7 @@ public final class JavaRuntimeManager {
 
     /** Root: %USERPROFILE%\.modlauncher\java */
     public static Path getJavaRootDir() {
-        return Path.of(System.getProperty("user.home"), ".modlauncher", "java");
+        return Path.of(System.getenv("APPDATA"), ".modlauncher", "java");
     }
 
     /**

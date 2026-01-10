@@ -9,10 +9,7 @@ import java.util.*;
 
 public class ProfileStore {
 
-    public enum JoinMode {
-        SERVERS_DAT,   // stabil
-        DIRECT         // optional
-    }
+    public enum JoinMode { SERVERS_DAT, DIRECT }
 
     public record Profile(
             String name,
@@ -20,16 +17,14 @@ public class ProfileStore {
             String serverHost,
             int serverPort,
             JoinMode joinMode
-    ) {
-        @Override public String toString() { return name; }
-    }
+    ) {}
 
     private final Path baseDir;
     private final Path profilesFile;
     private final ObjectMapper om;
 
     public ProfileStore() {
-        this.baseDir = Path.of(System.getProperty("user.home"), ".modlauncher");
+        this.baseDir = Path.of(System.getenv("APPDATA"), ".modlauncher");
         this.profilesFile = baseDir.resolve("profiles.json");
         this.om = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
         try {
@@ -41,13 +36,28 @@ public class ProfileStore {
 
     public Path baseDir() { return baseDir; }
 
+    // ---- Shared cache (global) ----
+    public Path sharedRoot() { return baseDir.resolve("shared"); }
+    public Path sharedAssetsDir() { return sharedRoot().resolve("assets"); }
+    public Path sharedLibrariesDir() { return sharedRoot().resolve("libraries"); }
+    public Path sharedVersionsDir() { return sharedRoot().resolve("versions"); }
+
+    // ---- Instance dirs (per profile) ----
     public Path instanceDir(String profileName) {
         return baseDir.resolve("instances").resolve(profileName);
     }
 
-    /** eigener Minecraft Root pro Instanz */
+    public Path instanceGameDir(String profileName) {
+        return instanceDir(profileName).resolve("game");
+    }
+
+    public Path instanceRuntimeDir(String profileName) {
+        return instanceDir(profileName).resolve("runtime");
+    }
+
+    /** Backwards compat: früher war das "minecraft root". Jetzt ist es gameDir. */
     public Path minecraftDir(String profileName) {
-        return instanceDir(profileName).resolve("minecraft");
+        return instanceGameDir(profileName);
     }
 
     public List<Profile> loadProfiles() {
@@ -56,7 +66,8 @@ public class ProfileStore {
             Profile[] arr = om.readValue(profilesFile.toFile(), Profile[].class);
             return Arrays.asList(arr);
         } catch (Exception e) {
-            return List.of();
+            // NICHT stillschweigend schlucken, das ist Debug-Hölle
+            throw new RuntimeException("Failed to read profiles.json: " + e.getMessage(), e);
         }
     }
 

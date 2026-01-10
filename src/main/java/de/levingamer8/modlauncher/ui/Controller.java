@@ -1,13 +1,14 @@
 package de.levingamer8.modlauncher.ui;
 
-import de.levingamer8.modlauncher.core.PackUpdater;
+import de.levingamer8.modlauncher.auth.MicrosoftMinecraftAuth;
 import de.levingamer8.modlauncher.core.FileUtil;
+import de.levingamer8.modlauncher.core.ManifestModels;
+import de.levingamer8.modlauncher.core.PackUpdater;
 import de.levingamer8.modlauncher.core.ProfileStore;
 import de.levingamer8.modlauncher.core.ProfileStore.Profile;
-import de.levingamer8.modlauncher.mc.MinecraftInstaller;
+import de.levingamer8.modlauncher.core.ProfileStore.JoinMode;
+import de.levingamer8.modlauncher.core.LoaderType;
 import de.levingamer8.modlauncher.mc.MinecraftLauncherService;
-
-
 
 import javafx.application.Platform;
 import javafx.concurrent.Task;
@@ -17,9 +18,6 @@ import javafx.scene.control.*;
 import java.awt.Desktop;
 import java.nio.file.Path;
 import java.util.Optional;
-
-import de.levingamer8.modlauncher.core.ProfileStore.JoinMode;
-
 
 public class Controller {
 
@@ -32,10 +30,13 @@ public class Controller {
     @FXML private Label statusLabel;
     @FXML private TextField playerNameField;
     @FXML private Button playButton;
-
+    @FXML private Label loginStatusLabel;
 
     private final ProfileStore profileStore = new ProfileStore();
     private final PackUpdater updater = new PackUpdater();
+
+    private volatile MicrosoftMinecraftAuth.MinecraftSession mcSession;
+
 
     @FXML
     public void initialize() {
@@ -50,6 +51,7 @@ public class Controller {
         });
 
         appendLog("Instanz-Basisordner: " + profileStore.baseDir());
+        appendLog("Shared-Cache: " + profileStore.sharedRoot());
     }
 
     @FXML
@@ -77,8 +79,6 @@ public class Controller {
         if (url.isEmpty()) return;
 
         Profile p = new Profile(name, url, "localhost", 25565, JoinMode.SERVERS_DAT);
-
-
         profileStore.saveOrUpdateProfile(p);
 
         profileCombo.getItems().setAll(profileStore.loadProfiles());
@@ -99,12 +99,12 @@ public class Controller {
         if (res.isEmpty() || res.get() != ButtonType.OK) return;
 
         profileStore.deleteProfile(p.name());
-        // Instanzordner wirklich löschen
         try {
             FileUtil.deleteRecursive(profileStore.instanceDir(p.name()));
         } catch (Exception ex) {
             appendLog("WARNUNG: Konnte Instanzordner nicht löschen: " + ex.getMessage());
         }
+
         profileCombo.getItems().setAll(profileStore.loadProfiles());
         if (!profileCombo.getItems().isEmpty()) profileCombo.getSelectionModel().select(0);
 
@@ -119,21 +119,19 @@ public class Controller {
             showError("Manifest URL fehlt.");
             return;
         }
-        if (p == null) {
-            // Auto-Profil, wenn nichts ausgewählt
-            p = new Profile("default", manifestUrl, "localhost", 25565, JoinMode.SERVERS_DAT);
 
+        if (p == null) {
+            p = new Profile("default", manifestUrl, "localhost", 25565, JoinMode.SERVERS_DAT);
             profileStore.saveOrUpdateProfile(p);
             profileCombo.getItems().setAll(profileStore.loadProfiles());
             profileCombo.getSelectionModel().select(p);
         } else {
-            // URL im Profil aktualisieren
             p = new Profile(p.name(), manifestUrl, p.serverHost(), p.serverPort(), p.joinMode());
-
             profileStore.saveOrUpdateProfile(p);
         }
 
         Profile finalP = p;
+
         setUiBusy(true);
         clearLog();
         appendLog("Update gestartet: " + manifestUrl);
@@ -145,15 +143,18 @@ public class Controller {
                     updateMessage(msg);
                     Platform.runLater(() -> appendLog(msg));
                 }, (done, total) -> {
-                    double prog = total <= 0 ? -1 : (double) done / (double) total;
                     updateProgress(done, total);
-                    Platform.runLater(() -> progressBar.setProgress(prog < 0 ? ProgressIndicator.INDETERMINATE_PROGRESS : prog));
+                    double prog = total <= 0 ? -1 : (double) done / (double) total;
+                    Platform.runLater(() -> progressBar.setProgress(
+                            prog < 0 ? ProgressIndicator.INDETERMINATE_PROGRESS : prog
+                    ));
                 });
                 return null;
             }
         };
 
         statusLabel.textProperty().bind(task.messageProperty());
+
         task.setOnSucceeded(e -> {
             statusLabel.textProperty().unbind();
             statusLabel.setText("Fertig");
@@ -161,6 +162,7 @@ public class Controller {
             setUiBusy(false);
             progressBar.setProgress(1);
         });
+
         task.setOnFailed(e -> {
             statusLabel.textProperty().unbind();
             statusLabel.setText("Fehler");
@@ -185,47 +187,80 @@ public class Controller {
             return;
         }
 
-        String name = playerNameField.getText().trim();
-        if (name.isEmpty()) name = "Player";
+        String playerName = playerNameField.getText().trim();
+        if (playerName.isEmpty()) playerName = "Player";
 
-        Path gameDir = profileStore.minecraftDir(p.name());
+        String manifestUrl = manifestUrlField.getText().trim();
+        if (manifestUrl.isEmpty()) {
+            showError("Manifest URL fehlt.");
+            return;
+        }
+
+        // Profil URL sicher speichern (falls Feld geändert wurde)
+        Profile finalP = new Profile(p.name(), manifestUrl, p.serverHost(), p.serverPort(), p.joinMode());
+        profileStore.saveOrUpdateProfile(finalP);
 
         setUiBusy(true);
-        appendLog("Play: Forge wird geprüft/installed und danach gestartet...");
+        progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
+        appendLog("Play gestartet: Manifest laden, Loader installieren, dann starten...");
 
-        String finalName = name;
-
-        appendLog("GameDir (launch): " + gameDir);
-        appendLog("InstanceDir: " + profileStore.instanceDir(p.name()));
-
-
+        String finalName = playerName;
 
         Task<Void> task = new Task<>() {
             @Override
             protected Void call() throws Exception {
-                // 1) Sicherstellen: MC + Forge installiert in die Instance
-                MinecraftInstaller.ensureInstalled(gameDir, MinecraftInstaller.DEFAULT, (msg) -> {
-                    updateMessage(msg);
-                    Platform.runLater(() -> appendLog(msg));
-                });
 
-                // 2) Starten (offline name für jetzt)
-                Platform.runLater(() -> appendLog("Starte Spiel..."));
-                String forgeProfileId = MinecraftInstaller.forgeProfileId(MinecraftInstaller.DEFAULT);
+                updateMessage("Manifest laden...");
+                ManifestModels.Manifest manifest = fetchManifest(finalP.manifestUrl());
 
-                MinecraftLauncherService.launchForgeBootstrap(
+                LoaderType loaderType = LoaderType.fromString(
+                        manifest.loader() != null ? manifest.loader().type() : "vanilla"
+                );
+                String loaderVer = manifest.loader() != null ? manifest.loader().version() : "";
+
+                Path sharedRoot = profileStore.sharedRoot();
+                Path gameDir = profileStore.instanceGameDir(finalP.name());
+                Path runtimeDir = profileStore.instanceRuntimeDir(finalP.name());
+
+                MinecraftLauncherService launcher = new MinecraftLauncherService();
+
+                MinecraftLauncherService.AuthSession auth;
+
+                if (mcSession != null && mcSession.minecraftAccessToken() != null && !mcSession.minecraftAccessToken().isBlank()) {
+                    auth = new MinecraftLauncherService.AuthSession(
+                            mcSession.playerName(),
+                            mcSession.uuid(),
+                            mcSession.minecraftAccessToken(),
+                            mcSession.userType() // z.B. "msa"
+                    );
+                } else {
+                    // erstmal: offline fallback (oder du zwingst login)
+                    auth = new MinecraftLauncherService.AuthSession(
+                            "Player",
+                            "00000000000000000000000000000000",
+                            "0",
+                            "legacy"
+                    );
+                }
+
+
+
+                updateMessage("Install/Resolve/Launch...");
+                launcher.launch(
+                        sharedRoot,
                         gameDir,
-                        MinecraftInstaller.DEFAULT.mcVersion(),
-                        forgeProfileId,
-                        finalName,
-                        4096,
+                        runtimeDir,
+                        new MinecraftLauncherService.LaunchSpec(
+                                manifest.minecraft(),
+                                loaderType,
+                                loaderVer,
+                                4096
+                        ),
+                        auth,
                         msg -> Platform.runLater(() -> appendLog(msg))
                 );
 
-
-
-
-
+                updateMessage("MC gestartet.");
                 return null;
             }
         };
@@ -236,6 +271,7 @@ public class Controller {
             statusLabel.textProperty().unbind();
             statusLabel.setText("Gestartet");
             setUiBusy(false);
+            progressBar.setProgress(1);
         });
 
         task.setOnFailed(e -> {
@@ -244,6 +280,7 @@ public class Controller {
             Throwable ex = task.getException();
             appendLog("FEHLER: " + (ex != null ? ex.getMessage() : "unbekannt"));
             setUiBusy(false);
+            progressBar.setProgress(0);
             if (ex != null) ex.printStackTrace();
             showError(ex != null ? ex.getMessage() : "Unbekannter Fehler");
         });
@@ -252,7 +289,6 @@ public class Controller {
         t.setDaemon(true);
         t.start();
     }
-
 
     @FXML
     public void onOpenFolder() {
@@ -295,5 +331,86 @@ public class Controller {
         a.setHeaderText("Aktion fehlgeschlagen");
         a.setContentText(msg);
         a.showAndWait();
+    }
+
+    private void setLoginStatus(String text) {
+        if (loginStatusLabel == null) return;
+
+        Platform.runLater(() -> loginStatusLabel.setText(text));
+    }
+
+
+    @FXML
+    private void onLoginClicked() {
+        setLoginStatus("Starte Login...");
+
+        Task<MicrosoftMinecraftAuth.MinecraftSession> task = new Task<>() {
+            @Override
+            protected MicrosoftMinecraftAuth.MinecraftSession call() throws Exception {
+                MicrosoftMinecraftAuth auth = new MicrosoftMinecraftAuth();
+
+                // 1) Device code holen
+                var dc = auth.startDeviceCode();
+
+                // 2) User informieren
+                Platform.runLater(() -> {
+                    appendLog("[LOGIN] Öffne: " + dc.verificationUri());
+                    appendLog("[LOGIN] Code:  " + dc.userCode());
+                    setLoginStatus("Bitte Code eingeben: " + dc.userCode());
+                });
+
+                // Optional: Browser öffnen
+                try {
+                    java.awt.Desktop.getDesktop().browse(java.net.URI.create(dc.verificationUri()));
+                } catch (Exception ignored) {}
+
+                // 3) Polling bis fertig
+                return auth.loginWithDeviceCode(dc);
+            }
+        };
+
+        task.setOnSucceeded(e -> {
+            mcSession = task.getValue();
+            setLoginStatus("Eingeloggt als: " + mcSession.playerName());
+            appendLog("[LOGIN] OK: " + mcSession.playerName() + " / " + mcSession.uuid());
+
+            // Optional: playerNameField automatisch setzen
+            if (playerNameField != null) playerNameField.setText(mcSession.playerName());
+        });
+
+        task.setOnFailed(e -> {
+            Throwable ex = task.getException();
+            setLoginStatus("Login fehlgeschlagen");
+            appendLog("[LOGIN] ERROR: " + (ex != null ? ex.toString() : "unknown"));
+        });
+
+        new Thread(task, "ms-login").start();
+    }
+
+
+
+
+    @FXML
+    private void onCopyLog() {
+        var cb = new javafx.scene.input.ClipboardContent();
+        cb.putString(logArea.getText());
+        javafx.scene.input.Clipboard.getSystemClipboard().setContent(cb);
+    }
+
+    @FXML
+    private void onClearLog() {
+        logArea.clear();
+    }
+
+
+    private ManifestModels.Manifest fetchManifest(String url) throws Exception {
+        var om = new com.fasterxml.jackson.databind.ObjectMapper();
+        var client = java.net.http.HttpClient.newBuilder()
+                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
+                .build();
+        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).GET().build();
+        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() != 200) throw new RuntimeException("Manifest HTTP " + resp.statusCode());
+        return om.readValue(resp.body(), ManifestModels.Manifest.class);
     }
 }

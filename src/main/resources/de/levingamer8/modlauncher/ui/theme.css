@@ -1,95 +1,137 @@
-/* Nexomaker-ish: dunkler Hintergrund, weiche Cards, klare Inputs, Accent */
-
 .root {
-    -fx-font-family: "Inter", "Segoe UI", system-ui;
-    -fx-background-color: #0b0f14;
+    -fx-background-color: #0f1115;
+    -fx-font-family: "Segoe UI";
 }
 
-/* Allgemeine Textfarben */
-.label, .text {
-    -fx-text-fill: #e6edf6;
-}
-
-#statusLabel {
-    -fx-text-fill: #9fb0c3;
-}
-
-/* Top area Hintergrund */
-.top {
+.header {
+    -fx-padding: 16 18 10 18;
     -fx-background-color: transparent;
 }
 
-/* Cards: gib VBox/HBox die styleClass "card" */
+.h1 {
+    -fx-font-size: 20px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #e9edf5;
+}
+
+.muted {
+    -fx-text-fill: #a9b3c5;
+}
+
+.mutedSmall {
+    -fx-text-fill: #7f8aa1;
+    -fx-font-size: 11px;
+}
+
+.pill {
+    -fx-background-color: rgba(120, 180, 255, 0.12);
+    -fx-text-fill: #bcd7ff;
+    -fx-padding: 6 10 6 10;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-border-color: rgba(120, 180, 255, 0.25);
+}
+
+.split {
+    -fx-background-color: transparent;
+}
+
+.scroll {
+    -fx-background: transparent;
+    -fx-background-color: transparent;
+}
+
+.panel {
+    -fx-padding: 16;
+}
+
 .card {
-    -fx-background-color: rgba(255,255,255,0.04);
-    -fx-background-radius: 14;
-    -fx-border-radius: 14;
-    -fx-border-color: rgba(255,255,255,0.08);
-    -fx-border-width: 1;
+    -fx-background-color: rgba(255,255,255,0.035);
+    -fx-background-radius: 12;
     -fx-padding: 14;
-}
-
-/* Inputs */
-.text-field, .combo-box, .choice-box {
-    -fx-background-color: rgba(255,255,255,0.06);
-    -fx-background-radius: 12;
+    -fx-border-color: rgba(255,255,255,0.08);
     -fx-border-radius: 12;
-    -fx-border-color: rgba(255,255,255,0.12);
-    -fx-text-fill: #e6edf6;
-    -fx-prompt-text-fill: rgba(230,237,246,0.45);
 }
 
-.text-field:focused, .combo-box:focused {
-    -fx-border-color: rgba(43, 255, 195, 0.7);
+
+.sectionTitle {
+    -fx-text-fill: #e9edf5;
+    -fx-font-weight: 700;
+    -fx-font-size: 13px;
 }
 
-/* Buttons */
-.button {
+.text-field, .combo-box, .button, .progress-bar, .text-area {
+    -fx-focus-color: rgba(77, 217, 180, 0.6);
+    -fx-faint-focus-color: rgba(77, 217, 180, 0.18);
+}
+
+.text-field, .combo-box-base {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-background-radius: 10;
+    -fx-text-fill: #e9edf5;
+    -fx-prompt-text-fill: rgba(233,237,245,0.45);
+    -fx-border-color: rgba(255,255,255,0.08);
+    -fx-border-radius: 10;
+}
+
+.primary {
+    -fx-background-color: #31e3c1;
+    -fx-text-fill: #07110f;
+    -fx-font-weight: 700;
     -fx-background-radius: 12;
+    -fx-padding: 10 14 10 14;
+}
+
+.primaryBig {
+    -fx-background-color: #31e3c1;
+    -fx-text-fill: #07110f;
+    -fx-font-weight: 800;
+    -fx-font-size: 14px;
+    -fx-background-radius: 12;
+    -fx-padding: 12 14 12 14;
+}
+
+.secondary {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-text-fill: #e9edf5;
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(255,255,255,0.10);
     -fx-border-radius: 12;
     -fx-padding: 10 14 10 14;
-    -fx-background-color: rgba(255,255,255,0.06);
-    -fx-border-color: rgba(255,255,255,0.10);
-    -fx-border-width: 1;
-    -fx-text-fill: #e6edf6;
 }
 
-.button:hover {
-    -fx-background-color: rgba(255,255,255,0.09);
-}
-
-.button:pressed {
-    -fx-background-color: rgba(255,255,255,0.12);
-}
-
-/* Primärbutton: gib ihm styleClass "primary" */
-.button.primary {
-    -fx-background-color: linear-gradient(to right, #13f3b2, #33c3ff);
-    -fx-text-fill: #071018;
-    -fx-font-weight: bold;
-    -fx-border-color: transparent;
-}
-
-/* ProgressBar */
-.progress-bar {
+.ghost {
+    -fx-background-color: rgba(255,255,255,0.04);
     -fx-background-radius: 10;
-}
-.progress-bar .track {
-    -fx-background-color: rgba(255,255,255,0.08);
-    -fx-background-radius: 10;
-}
-.progress-bar .bar {
-    -fx-background-radius: 10;
+    -fx-text-fill: #cbd5e6;
+    -fx-border-color: rgba(255,255,255,0.08);
+    -fx-border-radius: 10;
 }
 
-/* Log area */
-.text-area {
-    -fx-background-color: rgba(255,255,255,0.03);
-    -fx-background-radius: 14;
-    -fx-border-radius: 14;
-    -fx-border-color: rgba(255,255,255,0.06);
-    -fx-text-fill: #e6edf6;
+.ghostDanger {
+    -fx-background-color: rgba(255,120,120,0.08);
+    -fx-background-radius: 10;
+    -fx-text-fill: #ffb2b2;
+    -fx-border-color: rgba(255,120,120,0.18);
+    -fx-border-radius: 10;
 }
-.text-area .content {
-    -fx-background-color: transparent;
+
+
+.logWrap {
+    -fx-padding: 16;
 }
+
+.logHeader {
+    -fx-padding: 0 0 6 0;
+}
+
+.logArea {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 12px;
+    -fx-background-color: rgba(0,0,0,0.35);
+    -fx-background-radius: 12;
+    -fx-text-fill: #e9edf5;
+    -fx-border-color: rgba(255,255,255,0.08);
+    -fx-border-radius: 12;
+}
+

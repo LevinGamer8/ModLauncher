@@ -1,53 +1,91 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
 
 <BorderPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
-            fx:controller="de.levingamer8.modlauncher.ui.Controller">
+            fx:controller="de.levingamer8.modlauncher.ui.Controller"
+            styleClass="root">
 
+    <!-- HEADER -->
     <top>
-        <VBox spacing="10" BorderPane.alignment="CENTER" style="-fx-padding: 14;" styleClass="card">
-            <Label text="ModLauncher (Updater MVP)" style="-fx-font-size: 18; -fx-font-weight: bold;"/>
-            <GridPane hgap="10" vgap="10">
-                <columnConstraints>
-                    <ColumnConstraints percentWidth="18"/>
-                    <ColumnConstraints percentWidth="82"/>
-                </columnConstraints>
-
-                <Label text="Manifest URL:" GridPane.rowIndex="0" GridPane.columnIndex="0"/>
-                <TextField fx:id="manifestUrlField" GridPane.rowIndex="0" GridPane.columnIndex="1"
-                           promptText="https://deinserver.tld/pack/manifest.json"/>
-
-                <Label text="Profil:" GridPane.rowIndex="1" GridPane.columnIndex="0"/>
-                <HBox spacing="8" GridPane.rowIndex="1" GridPane.columnIndex="1">
-                    <ComboBox fx:id="profileCombo" prefWidth="420"/>
-                    <Button text="Neu" onAction="#onNewProfile"/>
-                    <Button text="Löschen" onAction="#onDeleteProfile"/>
-                </HBox>
-            </GridPane>
-
-            <HBox spacing="10">
-                <Button fx:id="updateButton" text="Update / Installieren" onAction="#onUpdate" styleClass="primary"/>
-                <Button fx:id="openFolderButton" text="Instanzordner öffnen" onAction="#onOpenFolder" />
-                <Region HBox.hgrow="ALWAYS"/>
-                <Label fx:id="statusLabel" text="Bereit"/>
-            </HBox>
-
-            <HBox spacing="10">
-                <Label text="Name:" styleClass="muted"/>
-                <TextField fx:id="playerNameField" prefWidth="180" promptText="Noah"/>
-                <Button fx:id="playButton" text="Start" onAction="#onPlay" styleClass="primary"/>
-            </HBox>
-
-
-            <ProgressBar fx:id="progressBar" prefWidth="9999" progress="0"/>
-        </VBox>
+        <HBox styleClass="header" spacing="12" BorderPane.alignment="CENTER_LEFT">
+            <VBox spacing="2">
+                <Label text="ModLauncher" styleClass="h1"/>
+                <Label text="made by LevinGamer8" styleClass="muted"/>
+            </VBox>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="statusLabel" text="Bereit" styleClass="pill"/>
+        </HBox>
     </top>
 
+    <!-- MAIN -->
     <center>
-        <TextArea fx:id="logArea" editable="false" wrapText="false" style="-fx-font-family: 'Consolas';"/>
+        <SplitPane dividerPositions="0.36" styleClass="split">
+            <!-- LEFT: CONTROLS -->
+            <ScrollPane fitToWidth="true" styleClass="scroll">
+                <VBox spacing="14" styleClass="panel" prefWidth="360">
+                    <!-- Manifest -->
+                    <VBox spacing="6" styleClass="card">
+                        <Label text="Manifest" styleClass="sectionTitle"/>
+                        <Label text="Manifest URL" styleClass="muted"/>
+                        <TextField fx:id="manifestUrlField"
+                                   promptText="https://deinserver.tld/pack/manifest.json"/>
+
+                        <Label text="Profil" styleClass="muted"/>
+                        <HBox spacing="8">
+                            <ComboBox fx:id="profileCombo" HBox.hgrow="ALWAYS"/>
+                            <Button text="Neu" onAction="#onNewProfile" styleClass="ghost"/>
+                            <Button text="Löschen" onAction="#onDeleteProfile" styleClass="ghostDanger"/>
+                        </HBox>
+                    </VBox>
+
+                    <!-- Player + Login -->
+                    <VBox spacing="10" styleClass="card">
+                        <Label text="Account" styleClass="sectionTitle"/>
+
+                        <Label text="Name (Offline/Anzeige)" styleClass="muted"/>
+                        <TextField fx:id="playerNameField" promptText="Player"/>
+
+                        <!-- Optional: Login -->
+                        <HBox spacing="10">
+                            <Button fx:id="loginButton" text="Login (Microsoft)" onAction="#onLoginClicked" styleClass="secondary" />
+                            <Label fx:id="loginStatusLabel" text="Nicht eingeloggt" styleClass="muted" />
+                        </HBox>
+                    </VBox>
+
+                    <!-- Actions -->
+                    <VBox spacing="10" styleClass="card">
+                        <Label text="Aktionen" styleClass="sectionTitle"/>
+
+                        <HBox spacing="10">
+                            <Button fx:id="updateButton" text="Update / Installieren" onAction="#onUpdate" styleClass="primary" HBox.hgrow="ALWAYS"/>
+                            <Button fx:id="openFolderButton" text="Instanzordner öffnen" onAction="#onOpenFolder" styleClass="secondary"/>
+                        </HBox>
+
+                        <Button fx:id="playButton" text="Start" onAction="#onPlay" styleClass="primaryBig"/>
+
+                        <ProgressBar fx:id="progressBar" progress="0" prefWidth="9999"/>
+                    </VBox>
+
+                    <Label text="Tip: Log rechts – bei Problemen einfach kopieren." styleClass="mutedSmall"/>
+                </VBox>
+            </ScrollPane>
+
+            <!-- RIGHT: LOG -->
+            <VBox styleClass="logWrap" spacing="10">
+                <HBox spacing="10" styleClass="logHeader">
+                    <Label text="Log" styleClass="sectionTitle"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button text="Kopieren" onAction="#onCopyLog" styleClass="ghost"/>
+                    <Button text="Leeren" onAction="#onClearLog" styleClass="ghost"/>
+                </HBox>
+
+                <TextArea fx:id="logArea" editable="false" wrapText="false" styleClass="logArea"/>
+            </VBox>
+        </SplitPane>
     </center>
 
 </BorderPane>

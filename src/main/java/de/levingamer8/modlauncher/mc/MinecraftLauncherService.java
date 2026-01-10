@@ -1,341 +1,265 @@
 package de.levingamer8.modlauncher.mc;
 
+import com.google.gson.JsonObject;
+import de.levingamer8.modlauncher.core.LoaderType;
 import de.levingamer8.modlauncher.runtime.JavaRuntimeManager;
-import fr.flowarg.openlauncherlib.NewForgeVersionDiscriminator;
-import fr.theshark34.openlauncherlib.LaunchException;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public final class MinecraftLauncherService {
 
-    private MinecraftLauncherService() {}
+    public record AuthSession(String playerName, String uuid, String accessToken, String userType) {}
+    public record LaunchSpec(String mcVersion, LoaderType loaderType, String loaderVersion, int memoryMb) {}
 
-    private static void mustExist(Path p, String what) throws LaunchException {
-        if (!Files.exists(p)) throw new LaunchException("Fehlt: " + what + " (" + p + ")");
-    }
+    private final MojangDownloader mojang = new MojangDownloader();
+    private final MinecraftInstaller vanillaInstaller = new MinecraftInstaller(); // FlowUpdater wrapper
+    private final FabricInstaller fabricInstaller = new FabricInstaller();
+    private final ForgeInstaller1122Plus forgeInstaller = new ForgeInstaller1122Plus();
+    private final MojangVersionResolver resolver = new MojangVersionResolver();
+    private final LibraryService libraryService = new LibraryService();
+    private final ArgsBuilder argsBuilder = new ArgsBuilder();
 
-    private static String quoteIfNeeded(String s) {
-        if (s.indexOf(' ') >= 0 || s.indexOf('\t') >= 0) return "\"" + s + "\"";
-        return s;
-    }
-
-    private static List<Path> collectAllLibraryJars(Path gameDir) throws LaunchException {
-        Path libs = gameDir.resolve("libraries");
-        mustExist(libs, "libraries");
-
-        try (Stream<Path> s = Files.walk(libs)) {
-            return s.filter(Files::isRegularFile)
-                    .filter(p -> p.getFileName().toString().toLowerCase().endsWith(".jar"))
-                    .sorted()
-                    .collect(Collectors.toCollection(ArrayList::new));
-        } catch (Exception e) {
-            throw new LaunchException("Libraries sammeln fehlgeschlagen: " + e.getMessage(), e);
-        }
-    }
-
-    // --------- Normalizer (damit Module-Resolution nicht wieder explodiert) ---------
-
-    private static List<Path> normalizeAsm(List<Path> jars) {
-        List<Path> asmJars = jars.stream()
-                .filter(p -> p.toString().replace('\\','/').toLowerCase().contains("/org/ow2/asm/"))
-                .collect(Collectors.toList());
-        if (asmJars.isEmpty()) return jars;
-
-        List<String> required = List.of("asm", "asm-tree", "asm-analysis", "asm-commons", "asm-util");
-        Map<String, Set<String>> byArtifact = new HashMap<>();
-
-        for (Path p : asmJars) {
-            String path = p.toString().replace('\\','/');
-            String[] parts = path.split("/");
-
-            // .../org/ow2/asm/<artifact>/<version>/<jar>
-            int idx = -1;
-            for (int i = 0; i < parts.length; i++) {
-                if (i >= 2 && parts[i].equalsIgnoreCase("asm")
-                        && parts[i-1].equalsIgnoreCase("ow2")
-                        && parts[i-2].equalsIgnoreCase("org")) {
-                    idx = i;
-                    break;
-                }
-            }
-            if (idx >= 0 && idx + 2 < parts.length) {
-                String artifact = parts[idx + 1];
-                String version  = parts[idx + 2];
-                byArtifact.computeIfAbsent(artifact, k -> new HashSet<>()).add(version);
-            }
-        }
-
-        Set<String> candidates = null;
-        for (String art : required) {
-            Set<String> versions = byArtifact.getOrDefault(art, Set.of());
-            if (candidates == null) candidates = new HashSet<>(versions);
-            else candidates.retainAll(versions);
-        }
-        if (candidates == null || candidates.isEmpty()) return jars;
-
-        // höchste Version nehmen
-        String chosen = candidates.stream().sorted().reduce((a,b) -> b).orElse(null);
-        if (chosen == null) return jars;
-
-        final String v = chosen.toLowerCase();
-        return jars.stream().filter(p -> {
-            String path = p.toString().replace('\\','/').toLowerCase();
-            if (!path.contains("/org/ow2/asm/")) return true;
-
-            for (String art : required) {
-                String a = art.toLowerCase();
-                if (path.contains("/org/ow2/asm/" + a + "/")) {
-                    return path.contains("/org/ow2/asm/" + a + "/" + v + "/");
-                }
-            }
-            return true;
-        }).collect(Collectors.toCollection(ArrayList::new));
-    }
-
-    private static List<Path> keepOnlyOneVersionByFolder(List<Path> jars, String folderMarker, boolean preferStable) {
-        // folderMarker z.B. "/net/sf/jopt-simple/jopt-simple/"
-        List<Path> hits = jars.stream()
-                .filter(p -> p.toString().replace('\\','/').toLowerCase().contains(folderMarker))
-                .collect(Collectors.toList());
-        if (hits.size() <= 1) return jars;
-
-        Map<String, List<Path>> byVersion = new HashMap<>();
-        for (Path p : hits) {
-            String path = p.toString().replace('\\','/');
-            String[] parts = path.split("/");
-            for (int i = 0; i < parts.length - 2; i++) {
-                if (parts[i].toLowerCase().equals(folderMarker.substring(folderMarker.lastIndexOf('/')+1).replace("/",""))) {
-                    // nicht zuverlässig - deshalb: besser Version aus dem direkten Parent nehmen:
-                    // wir suchen das Segment NACH dem marker im Pfad
-                }
-            }
-            // robust: Version ist i.d.R. das Parent-Verzeichnis der Jar-Datei
-            Path parent = p.getParent();
-            if (parent != null) {
-                String version = parent.getFileName().toString();
-                byVersion.computeIfAbsent(version, k -> new ArrayList<>()).add(p);
-            }
-        }
-        if (byVersion.isEmpty()) return jars;
-
-        List<String> versions = byVersion.keySet().stream().sorted().collect(Collectors.toList());
-
-        String chosen = null;
-        if (preferStable) {
-            List<String> stable = versions.stream().filter(v -> {
-                String lv = v.toLowerCase();
-                return !(lv.contains("alpha") || lv.contains("beta") || lv.contains("rc"));
-            }).collect(Collectors.toList());
-            if (!stable.isEmpty()) chosen = stable.get(stable.size()-1);
-        }
-        if (chosen == null) chosen = versions.get(versions.size()-1);
-
-        Set<Path> keep = new HashSet<>(byVersion.getOrDefault(chosen, List.of()));
-
-        return jars.stream().filter(p -> {
-            String s = p.toString().replace('\\','/').toLowerCase();
-            if (!s.contains(folderMarker)) return true;
-            return keep.contains(p);
-        }).collect(Collectors.toCollection(ArrayList::new));
-    }
-
-    private static List<Path> normalizeJoptSimple(List<Path> jars) {
-        // Forge/Minecraft brauchen praktisch immer jopt-simple 5.x, 6-alpha ist Mist hier.
-        return keepOnlyOneVersionByFolder(jars, "/net/sf/jopt-simple/jopt-simple/", true);
-    }
-
-    private static List<Path> normalizeGson(List<Path> jars) {
-        return keepOnlyOneVersionByFolder(jars, "/com/google/code/gson/gson/", false);
-    }
-
-    // --------- module-path filter ---------
-
-    private static boolean isBadForModulePath(Path p) {
-        String s = p.toString().replace('\\','/').toLowerCase();
-        String name = p.getFileName().toString().toLowerCase();
-
-        // diese Minecraft client jars sind NICHT modulfähig -> killt boot layer
-        if (s.contains("/net/minecraft/client/")) return true;
-        if (name.contains("-slim.jar")) return true;
-        if (name.contains("-srg.jar")) return true;
-        if (name.contains("-extra.jar")) return true;
-
-        // optional: manche haben irgendwo random top-level classes (unnamed package)
-        // das kann man nicht sicher erkennen ohne reinzuschauen -> lassen wir weg.
-
-        return false;
-    }
-
-    public static Process launchForgeBootstrap(
-            Path gameDir,
-            String mcVersion,
-            String forgeProfileId,
-            String playerName,
-            int ramMb,
+    public Process launch(
+            Path sharedRoot,
+            Path instanceGameDir,
+            Path instanceRuntimeDir,
+            LaunchSpec spec,
+            AuthSession auth,
             Consumer<String> log
-    ) throws LaunchException {
+    ) throws Exception {
 
-        Path root = gameDir.toAbsolutePath();
-        mustExist(root, "GameDir");
-        mustExist(root.resolve("assets"), "assets");
-        mustExist(root.resolve("libraries"), "libraries");
-        mustExist(root.resolve("client.jar"), "client.jar");
+        Files.createDirectories(sharedRoot);
+        Files.createDirectories(instanceGameDir);
+        Files.createDirectories(instanceRuntimeDir);
 
-        Path forgeJson = root.resolve("versions")
-                .resolve(forgeProfileId)
-                .resolve(forgeProfileId + ".json");
-        mustExist(forgeJson, "Forge Version JSON");
+        // 1) Vanilla assets/libs via FlowUpdater
+        vanillaInstaller.ensureVanillaInstalled(sharedRoot, spec.mcVersion(), safeLog(log));
 
-        final NewForgeVersionDiscriminator nfvd;
-        try {
-            nfvd = new NewForgeVersionDiscriminator(forgeJson);
-            if (log != null) log.accept("[BOOT] NFVD aus JSON: forge=" + nfvd.getForgeVersion()
-                    + " mc=" + nfvd.getMcVersion()
-                    + " mcp=" + nfvd.getMcpVersion()
-                    + " group=" + nfvd.getForgeGroup());
-        } catch (Exception e) {
-            throw new LaunchException("NFVD lesen fehlgeschlagen: " + e.getMessage(), e);
+        // 2) Mojang version json + client jar garantieren
+        mojang.ensureVersionJson(sharedRoot, spec.mcVersion());
+        mojang.ensureClientJar(sharedRoot, spec.mcVersion());
+
+        // 3) Loader versionId bestimmen
+        String versionId;
+        String effectiveLoaderVersion = spec.loaderVersion(); // nur für Logging/Forge
+
+        if (spec.loaderType() == LoaderType.VANILLA) {
+            versionId = spec.mcVersion();
+        } else if (spec.loaderType() == LoaderType.FABRIC) {
+            // >>> Production-Mode: immer latest Fabric Loader passend zur MC-Version <<<
+            FabricInstaller.LatestFabric latest = fabricInstaller.fetchLatestLoaderForMc(spec.mcVersion());
+            effectiveLoaderVersion = latest.loaderVersion();
+            if (log != null) log.accept("[FABRIC] Verwende latest loader für " + spec.mcVersion() + ": " + effectiveLoaderVersion);
+
+            versionId = fabricInstaller.ensureFabricVersion(sharedRoot, spec.mcVersion(), effectiveLoaderVersion);
+
+            // Fabric API auto installieren (mit effektivem Loader)
+            FabricApiAutoInstaller fai = new FabricApiAutoInstaller();
+            FabricApiAutoInstaller.Result r = fai.ensureFabricApiInstalled(instanceGameDir, spec.mcVersion(), effectiveLoaderVersion, log);
+
+            // Falls r.jarPath == null -> heißt: selbst mit latest Loader geht’s nicht (sollte praktisch nie passieren)
+            if (r.jarPath() == null && r.requiredLoaderMinOrNull() != null) {
+                throw new IllegalStateException("Fabric API benötigt Loader >= " + r.requiredLoaderMinOrNull()
+                        + ", aber latest Loader ist " + effectiveLoaderVersion + " (unplausibel).");
+            }
+        } else if (spec.loaderType() == LoaderType.FORGE) {
+            // Forge bleibt wie gehabt (bis Processor-Installer drin ist)
+            versionId = forgeInstaller.ensureForgeVersion(sharedRoot, spec.mcVersion(), spec.loaderVersion());
+        } else {
+            throw new IllegalStateException("Unbekannter LoaderType: " + spec.loaderType());
         }
 
-        Path javaExePath = JavaRuntimeManager.ensureJava(mcVersion, log);
-        String javaExe = javaExePath.toAbsolutePath().toString();
+        // 4) merged version json
+        JsonObject v = resolver.resolveMergedVersionJson(sharedRoot, versionId);
 
-        // libs sammeln + normalize (wichtig!)
-        List<Path> libJars = collectAllLibraryJars(root);
-        libJars = normalizeAsm(libJars);
-        libJars = normalizeJoptSimple(libJars);
-        libJars = normalizeGson(libJars);
+        // 5) classpath sicherstellen
+        List<Path> cp = libraryService.ensureClasspath(sharedRoot, v);
 
-        // module-path: alle libs außer kaputte minecraft client jars
-        List<Path> modulePathJars = libJars.stream()
-                .filter(p -> !isBadForModulePath(p))
-                .sorted()
-                .collect(Collectors.toCollection(ArrayList::new));
+        // 6) natives extrahieren (pro instanz)
+        String fp = Integer.toHexString(Objects.hash(versionId, "windows-x64"));
+        Path nativesDir = instanceRuntimeDir.resolve("natives").resolve(fp);
+        if (Files.exists(nativesDir)) deleteRecursive(nativesDir);
+        Files.createDirectories(nativesDir);
 
-        String modulePath = modulePathJars.stream()
-                .map(p -> p.toAbsolutePath().toString())
-                .collect(Collectors.joining(java.io.File.pathSeparator));
+        libraryService.extractNativesX64(nativesDir, sharedRoot, v);
 
-        // classpath: alle libs + client.jar (Forge ist da tolerant)
-        Path clientJar = root.resolve("client.jar");
-        List<Path> cpJars = new ArrayList<>(libJars);
-        cpJars.add(clientJar);
+        // 7) assets index
+        String assetsIndex = v.has("assetIndex") && v.getAsJsonObject("assetIndex").has("id")
+                ? v.getAsJsonObject("assetIndex").get("id").getAsString()
+                : (v.has("assets") ? v.get("assets").getAsString() : "legacy");
 
-        String classpath = cpJars.stream()
-                .map(p -> p.toAbsolutePath().toString())
-                .collect(Collectors.joining(java.io.File.pathSeparator));
+        // 8) vars
+        Map<String, String> vars = new HashMap<>();
+        vars.put("auth_player_name", auth.playerName());
+        vars.put("auth_uuid", auth.uuid());
+        vars.put("auth_access_token", auth.accessToken());
+        vars.put("user_type", auth.userType());
 
-        String uuid = UUID.nameUUIDFromBytes(("OfflinePlayer:" + playerName).getBytes(StandardCharsets.UTF_8)).toString();
+        vars.put("version_name", v.get("id").getAsString());
+        vars.put("version_type", v.has("type") ? v.get("type").getAsString() : "release");
 
-        // Windows 206 fix: @argfile
-        Path argsFile = root.resolve(".modlauncher_jvm_args.txt");
-        List<String> argLines = new ArrayList<>();
+        vars.put("game_directory", instanceGameDir.toString());
+        vars.put("assets_root", sharedRoot.resolve("assets").toString());
+        vars.put("assets_index_name", assetsIndex);
+        vars.put("classpath", ArgsBuilder.joinClasspath(cp));
+        vars.put("natives_directory", nativesDir.toString());
 
-        argLines.add("-Djava.library.path=.");
-        argLines.add("-Dfml.ignoreInvalidMinecraftCertificates=true");
-        argLines.add("-Dfml.ignorePatchDiscrepancies=true");
+        vars.put("launcher_name", "ModLauncher");
+        vars.put("launcher_version", "1");
 
-        argLines.add("--add-opens=java.base/java.lang.invoke=ALL-UNNAMED");
-        argLines.add("--add-opens=java.base/java.util=ALL-UNNAMED");
+        // defaults, damit weniger rausfliegt
+        vars.put("resolution_width", "854");
+        vars.put("resolution_height", "480");
+        vars.put("clientid", "");
+        vars.put("auth_xuid", "");
+        vars.put("quickPlayPath", "");
+        vars.put("quickPlaySingleplayer", "");
+        vars.put("quickPlayMultiplayer", "");
+        vars.put("quickPlayRealms", "");
 
-        // <<< DAS ist hier Pflicht, sonst fehlen ASM-Module >>>
-        argLines.add("--module-path");
-        argLines.add(quoteIfNeeded(modulePath));
-        argLines.add("--add-modules");
-        argLines.add("ALL-MODULE-PATH");
+        // 9) args
+        List<String> jvmArgs = new ArrayList<>();
+        jvmArgs.add("-Xmx" + spec.memoryMb() + "M");
+        jvmArgs.add("-Xms" + Math.min(512, spec.memoryMb()) + "M");
+        jvmArgs.add("-Djava.library.path=" + nativesDir);
+        jvmArgs.addAll(argsBuilder.buildJvmArgs(v, vars));
+        jvmArgs = sanitizeJvmArgs(jvmArgs);
 
-        argLines.add("-Xms512M");
-        argLines.add("-Xmx" + ramMb + "M");
-        argLines.add("-Dfile.encoding=UTF-8");
-        argLines.add("-Dsun.stdout.encoding=UTF-8");
-        argLines.add("-Dsun.stderr.encoding=UTF-8");
+        List<String> gameArgs = argsBuilder.buildGameArgs(v, vars);
+        gameArgs = sanitizeUnresolvedArgs(gameArgs);
 
-        argLines.add("-cp");
-        argLines.add(quoteIfNeeded(classpath));
+        // 10) main + java
+        String mainClass = v.get("mainClass").getAsString();
+        Path javaExe = JavaRuntimeManager.ensureJava(spec.mcVersion(), safeLog(log));
 
-        try {
-            Files.write(argsFile, argLines, StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-        } catch (IOException e) {
-            throw new LaunchException("Konnte args file nicht schreiben: " + e.getMessage(), e);
-        }
-
+        // 11) cmd
         List<String> cmd = new ArrayList<>();
-        cmd.add(javaExe);
-        cmd.add("@" + argsFile.toAbsolutePath());
-        cmd.add("cpw.mods.bootstraplauncher.BootstrapLauncher");
+        cmd.add(javaExe.toString());
+        cmd.addAll(jvmArgs);
+        cmd.add("-cp");
+        cmd.add(ArgsBuilder.joinClasspath(cp));
+        cmd.add(mainClass);
+        cmd.addAll(gameArgs);
 
-        cmd.add("--username");     cmd.add(playerName);
-        cmd.add("--version");      cmd.add(forgeProfileId);
-        cmd.add("--gameDir");      cmd.add(root.toString());
-        cmd.add("--assetsDir");    cmd.add(root.resolve("assets").toString());
-        cmd.add("--assetIndex");   cmd.add(forgeProfileId);
-
-        cmd.add("--uuid");         cmd.add(uuid);
-        cmd.add("--accessToken");  cmd.add("0");
-        cmd.add("--userType");     cmd.add("mojang");
-        cmd.add("--versionType");  cmd.add("release");
-
-        cmd.add("--launchTarget"); cmd.add("forgeclient");
-
-        cmd.add("--fml.forgeVersion"); cmd.add(nfvd.getForgeVersion());
-        cmd.add("--fml.mcVersion");    cmd.add(nfvd.getMcVersion());
-        cmd.add("--fml.forgeGroup");   cmd.add(nfvd.getForgeGroup());
-        cmd.add("--fml.mcpVersion");   cmd.add(nfvd.getMcpVersion());
-
-        if (log != null) {
-            log.accept("[BOOT] Starte Forge via BootstrapLauncher...");
-            log.accept("[BOOT] java=" + javaExe);
-            log.accept("[BOOT] gameDir=" + root);
-            log.accept("[BOOT] forgeProfileId=" + forgeProfileId);
-            log.accept("[BOOT] cpJars=" + cpJars.size());
-            log.accept("[BOOT] moduleJars=" + modulePathJars.size());
-            log.accept("[BOOT] argsFile=" + argsFile.toAbsolutePath());
-            log.accept("[BOOT] CMD: " + String.join(" ", cmd));
-        }
+        if (log != null) log.accept("[LAUNCH] " + String.join(" ", cmd));
 
         ProcessBuilder pb = new ProcessBuilder(cmd);
-        pb.directory(root.toFile());
+        pb.directory(instanceGameDir.toFile());
         pb.redirectErrorStream(true);
+        Process p = pb.start();
 
-        final Process p;
-        try {
-            p = pb.start();
-        } catch (IOException e) {
-            throw new LaunchException("Konnte Minecraft-Prozess nicht starten: " + e.getMessage(), e);
-        }
-
-        Thread reader = new Thread(() -> {
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+        // stdout -> log
+        new Thread(() -> {
+            try (var r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
                 String line;
-                while ((line = br.readLine()) != null) {
+                while ((line = r.readLine()) != null) {
                     if (log != null) log.accept("[MC] " + line);
                 }
-            } catch (Exception e) {
-                if (log != null) log.accept("[MC] Log-Reader Fehler: " + e.getMessage());
-            }
-        }, "mc-stdout");
-        reader.setDaemon(true);
-        reader.start();
-
-        Thread waiter = new Thread(() -> {
-            try {
-                int code = p.waitFor();
-                if (log != null) log.accept("[MC] Prozess beendet. ExitCode=" + code);
-            } catch (InterruptedException ignored) {}
-        }, "mc-waiter");
-        waiter.setDaemon(true);
-        waiter.start();
+            } catch (Exception ignored) {}
+        }, "mc-stdout").start();
 
         return p;
+    }
+
+    private static Consumer<String> safeLog(Consumer<String> log) {
+        return log != null ? log : (s) -> {};
+    }
+
+    private static List<String> sanitizeJvmArgs(List<String> in) {
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < in.size(); i++) {
+            String a = in.get(i);
+
+            // -cp setzen wir selbst
+            if ("-cp".equals(a) || "-classpath".equals(a)) {
+                i++;
+                continue;
+            }
+            // java.library.path setzen wir selbst
+            if (a.startsWith("-Djava.library.path=")) continue;
+
+            out.add(a);
+        }
+        return out;
+    }
+
+    private static List<String> sanitizeUnresolvedArgs(List<String> args) {
+        // 1) Entferne unresolved ${...}
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < args.size(); i++) {
+            String a = args.get(i);
+
+            if (a.contains("${")) continue;
+
+            out.add(a);
+        }
+
+        // 2) Entferne Flags, deren Value leer/fehlt ist
+        List<String> cleaned = new ArrayList<>();
+        Set<String> quickPlayFlags = Set.of(
+                "--quickPlayPath",
+                "--quickPlaySingleplayer",
+                "--quickPlayMultiplayer",
+                "--quickPlayRealms"
+        );
+
+        String chosenQuickPlayFlag = null;
+
+        for (int i = 0; i < out.size(); i++) {
+            String a = out.get(i);
+
+            // QuickPlay: nur eine Option zulassen
+            if (quickPlayFlags.contains(a)) {
+                String v = (i + 1 < out.size()) ? out.get(i + 1) : null;
+
+                // wenn value fehlt/leer -> komplett raus (Flag + ggf. value)
+                if (v == null || v.isBlank() || v.startsWith("--")) {
+                    continue;
+                }
+
+                // wenn schon eine QuickPlay-Option gewählt -> diese komplett skippen
+                if (chosenQuickPlayFlag != null) {
+                    i++; // auch value skippen
+                    continue;
+                }
+
+                // erste gültige QuickPlay-Option behalten
+                chosenQuickPlayFlag = a;
+                cleaned.add(a);
+                cleaned.add(v);
+                i++; // value consumed
+                continue;
+            }
+
+            // generisches: wenn Flag kommt und value fehlt/leer -> Flag skippen
+            if (a.startsWith("--")) {
+                if (i + 1 < out.size()) {
+                    String v = out.get(i + 1);
+                    if (v.isBlank()) {
+                        i++; // value skippen
+                        continue;
+                    }
+                    // Spezialfall: nächstes ist wieder ein Flag -> value fehlt
+                    if (v.startsWith("--")) {
+                        continue;
+                    }
+                }
+            }
+
+            cleaned.add(a);
+        }
+
+        return cleaned;
+    }
+
+
+    private static void deleteRecursive(Path dir) throws Exception {
+        try (var s = Files.walk(dir)) {
+            s.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try { Files.deleteIfExists(p); } catch (Exception ignored) {}
+            });
+        }
     }
 }

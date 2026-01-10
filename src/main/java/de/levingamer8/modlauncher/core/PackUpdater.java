@@ -30,9 +30,9 @@ public class PackUpdater {
             throw new IllegalArgumentException("manifest.packId fehlt");
         }
 
-        // Instanzordner wird am Profilnamen festgemacht (nicht packId), damit du Profile umbenennen kannst wenn du willst.
+        // Instanzordner wird am Profilnamen festgemacht (nicht packId), damit du Profile umbenennen kannst, wenn du willst.
         Path instanceDir = profileStore.instanceDir(profile.name());
-        Path installDir = profileStore.minecraftDir(profile.name());
+        Path installDir = profileStore.instanceGameDir(profile.name());
         Files.createDirectories(instanceDir);
         Files.createDirectories(instanceDir.resolve(".state"));
         Files.createDirectories(instanceDir.resolve("downloads"));
