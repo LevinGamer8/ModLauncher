@@ -108,7 +108,7 @@ jobs:
         if: github.ref_name == 'master'
         shell: powershell
         run: |
-          mvn -B versions:set -DnewVersion=${{ steps.ver.outputs.version }} -DgenerateBackupPoms=false
+          mvn -B versions:set "-DnewVersion=${{ steps.ver.outputs.version }}" "-DgenerateBackupPoms=false"
           git add pom.xml */pom.xml
           git commit -m "chore(release): ${{ steps.ver.outputs.tag }} [skip ci]"
           git tag ${{ steps.ver.outputs.tag }}
@@ -119,7 +119,7 @@ jobs:
         if: github.ref_name == 'nightly'
         shell: powershell
         run: |
-          mvn -B versions:set -DnewVersion=${{ steps.ver.outputs.version }} -DgenerateBackupPoms=false
+          mvn -B versions:set "-DnewVersion=${{ steps.ver.outputs.version }}" "-DgenerateBackupPoms=false"
 
       - name: Build (clean package + jpackage)
         shell: powershell
