@@ -1,0 +1,125 @@
+name: Build + Release
+
+on:
+  push:
+    branches: [ "master", "nightly" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+
+    # Verhindert Endlosschleife durch den Auto-Commit auf master
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java 24
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "24"
+          cache: maven
+
+      - name: Ensure WiX (needed for MSI)
+        shell: powershell
+        run: |
+          if (-not (Get-Command candle.exe -ErrorAction SilentlyContinue)) {
+            choco install wix -y
+          }
+
+      - name: Configure git user (for master auto-commit)
+        if: github.ref_name == 'master'
+        shell: powershell
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Read current version from pom.xml
+        id: pom
+        shell: powershell
+        run: |
+          $v = (./mvnw -q -DforceStdout help:evaluate -Dexpression=project.version).Trim()
+          if (-not $v) { throw "Could not read project.version from pom.xml" }
+          "current=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Compute target version + tag
+        id: ver
+        shell: powershell
+        run: |
+          $cur = "${{ steps.pom.outputs.current }}"
+
+          # erwartet semver X.Y.Z (ohne suffix). Falls du mal -SNAPSHOT nutzt: vorher bereinigen.
+          $base = $cur.Split("-")[0]
+          $parts = $base.Split(".")
+          if ($parts.Count -ne 3) { throw "pom version must be like 1.0.4 (got: $cur)" }
+
+          $maj = [int]$parts[0]
+          $min = [int]$parts[1]
+          $pat = [int]$parts[2]
+
+          if ("${{ github.ref_name }}" -eq "master") {
+            $pat = $pat + 1
+            $next = "$maj.$min.$pat"
+            $tag  = "v$next"
+            $pre  = "false"
+          } else {
+            # nightly: keine commits ins repo, aber build-version eindeutig machen
+            $next = "$maj.$min.$pat-nightly.${{ github.run_number }}"
+            $tag  = "v$next"
+            $pre  = "true"
+          }
+
+          "version=$next" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "prerelease=$pre" >> $env:GITHUB_OUTPUT
+
+      # MASTER: pom.xml hochzählen und commit + tag pushen
+      - name: Bump pom.xml version (master only)
+        if: github.ref_name == 'master'
+        shell: powershell
+        run: |
+          ./mvnw -B versions:set -DnewVersion=${{ steps.ver.outputs.version }} -DgenerateBackupPoms=false
+          git add pom.xml */pom.xml
+          git commit -m "chore(release): ${{ steps.ver.outputs.tag }} [skip ci]"
+          git tag ${{ steps.ver.outputs.tag }}
+          git push origin master --follow-tags
+
+      # NIGHTLY: version nur für den Build setzen (ohne commit)
+      - name: Set build version (nightly only, no commit)
+        if: github.ref_name == 'nightly'
+        shell: powershell
+        run: |
+          ./mvnw -B versions:set -DnewVersion=${{ steps.ver.outputs.version }} -DgenerateBackupPoms=false
+
+      - name: Build (clean package + jpackage)
+        shell: powershell
+        run: |
+          ./mvnw -B clean package
+          ./mvnw -B jpackage:jpackage
+
+      - name: Check MSI output
+        id: msi
+        shell: powershell
+        run: |
+          $path = "target/installer"
+          if (-not (Test-Path $path)) { throw "MSI folder not found: $path" }
+          $msi = Get-ChildItem -Path $path -Filter *.msi | Select-Object -First 1
+          if (-not $msi) { throw "No MSI found in $path" }
+          "file=$($msi.FullName)" >> $env:GITHUB_OUTPUT
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: ModLauncher ${{ steps.ver.outputs.version }}
+          prerelease: ${{ steps.ver.outputs.prerelease }}
+          generate_release_notes: true
+          files: |
+            ${{ steps.msi.outputs.file }}
