@@ -5,7 +5,6 @@ import de.levingamer8.modlauncher.core.ManifestModels;
 import de.levingamer8.modlauncher.core.PackUpdater;
 import de.levingamer8.modlauncher.core.ProfileStore;
 import de.levingamer8.modlauncher.core.ProfileStore.Profile;
-import de.levingamer8.modlauncher.core.ProfileStore.JoinMode;
 import de.levingamer8.modlauncher.core.LoaderType;
 import de.levingamer8.modlauncher.mc.MinecraftLauncherService;
 
@@ -20,6 +19,7 @@ import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
+import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.Node;
 import javafx.scene.control.*;
@@ -31,14 +31,20 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.ColumnConstraints;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
 
 import javafx.geometry.Insets;
-import javafx.fxml.FXML;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TitledPane;
-import javafx.application.Platform;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
+
+
 
 
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -46,7 +52,6 @@ import java.awt.*;
 
 public class Controller {
 
-    @FXML private TextField manifestUrlField;
     @FXML private ComboBox<Profile> profileCombo;
 
     @FXML private Button updateButton;
@@ -54,7 +59,6 @@ public class Controller {
     @FXML private ProgressBar progressBar;
     @FXML private TextArea logArea;
     @FXML private Label statusLabel;
-    @FXML private TextField playerNameField;
     @FXML private Button playButton;
     @FXML private Label loginStatusLabel;
     @FXML private Button loginButton;
@@ -64,11 +68,10 @@ public class Controller {
     @FXML private Label serverStatusLabel;
     @FXML private Label serverDetailsLabel;
     @FXML private Label packInfoLabel;
-
     @FXML private SplitPane mainSplit;
     @FXML private TitledPane logPane;
-
-
+    @FXML private ImageView skinView;
+    @FXML private Label accountNameLabel;
 
 
     private final ConcurrentLinkedQueue<String> logQueue = new ConcurrentLinkedQueue<>();
@@ -85,6 +88,7 @@ public class Controller {
     private MicrosoftSessionStore msStore;
 
     private UpdateController launcherUpdater;
+    private Dialog<Void> loginDialog;   // aktuell geöffneter Device-Code Dialog (wenn vorhanden)
 
 
 
@@ -113,9 +117,15 @@ public class Controller {
 
         reloadProfilesAndSelect(null);
 
-        profileCombo.valueProperty().addListener((obs, o, n) -> {
-            if (n != null) manifestUrlField.setText(n.manifestUrl());
+        profileCombo.valueProperty().addListener((obs, oldV, newV) -> {
+            if (openFolderButton != null) {
+                openFolderButton.setDisable(newV == null);
+            }
         });
+        if (openFolderButton != null) {
+            openFolderButton.setDisable(profileCombo.getValue() == null);
+        }
+
 
         appendLog("Instanz-Basisordner: " + profileStore.baseDir());
         appendLog("Shared-Cache: " + profileStore.sharedRoot());
@@ -123,6 +133,8 @@ public class Controller {
 
         msStore = new MicrosoftSessionStore(profileStore.baseDir().resolve("auth").resolve("microsoft_session.json"));
         tryLoadSavedMicrosoftSession();
+        updateAccountUi();
+
 
         launcherUpdater = new UpdateController(
                 "LevinGamer8",
@@ -138,9 +150,6 @@ public class Controller {
             Platform.runLater(() -> launcherUpdater.checkForUpdates(false));
         }
 
-
-
-
         // Default-Status optisch korrekt
         setStatus("Bereit", "pillOk");
 
@@ -150,28 +159,24 @@ public class Controller {
         if (packInfoLabel != null) packInfoLabel.setText("Manifest laden -> dann hier Infos anzeigen.");
 
 
-        // logArea defensiv
         if (logArea != null) logArea.setEditable(false);
 
         if (mainSplit != null && logPane != null) {
 
             Runnable apply = () -> {
                 if (logPane.isExpanded()) {
-                    mainSplit.setDividerPositions(0.60);   // Log sichtbar, ordentlich hoch
+                    mainSplit.setDividerPositions(0.60);
                 } else {
-                    mainSplit.setDividerPositions(0.97);   // Log quasi weg
+                    mainSplit.setDividerPositions(0.97);
                 }
             };
 
-            // Wichtig: 2 Layout-Pässe, sonst „klebt“ der Divider
             Platform.runLater(() -> Platform.runLater(apply));
 
             logPane.expandedProperty().addListener((obs, oldV, expanded) ->
                     Platform.runLater(() -> Platform.runLater(apply))
             );
         }
-
-
 
     }
 
@@ -206,9 +211,9 @@ public class Controller {
         }
 
         mcSession = s;
+        updateAccountUi();
         setLoginStatus("Eingeloggt als: " + mcSession.playerName());
         appendLog("[LOGIN] Session geladen: " + mcSession.playerName());
-        if (playerNameField != null) playerNameField.setText(mcSession.playerName());
     }
 
 
@@ -386,9 +391,6 @@ public class Controller {
 
         if (selected != null) {
             profileCombo.getSelectionModel().select(selected);
-            manifestUrlField.setText(selected.manifestUrl()); // <- wichtig
-        } else {
-            manifestUrlField.clear();
         }
     }
 
@@ -397,27 +399,22 @@ public class Controller {
     @FXML
     public void onUpdate() {
         Profile p = profileCombo.getValue();
-        String manifestUrl = manifestUrlField.getText().trim();
-        if (manifestUrl.isEmpty()) {
-            showError("Manifest URL fehlt.");
+        if (p == null) {
+            showError("Kein Profil ausgewählt.");
             return;
         }
 
-        if (p == null) {
-            p = new Profile("default", manifestUrl, "localhost", 25565, JoinMode.SERVERS_DAT);
-            profileStore.saveOrUpdateProfile(p);
-            profileCombo.getItems().setAll(profileStore.loadProfiles());
-            profileCombo.getSelectionModel().select(p);
-        } else {
-            p = new Profile(p.name(), manifestUrl, p.serverHost(), p.serverPort(), p.joinMode());
-            profileStore.saveOrUpdateProfile(p);
+        String manifestUrl = (p.manifestUrl() == null) ? "" : p.manifestUrl().trim();
+        if (manifestUrl.isEmpty()) {
+            showError("Dieses Profil hat keine Manifest URL. Bitte über 'Bearbeiten' setzen.");
+            return;
         }
-
-        Profile finalP = p;
 
         setUiBusy(true);
         clearLog();
         appendLog("Update gestartet: " + manifestUrl);
+
+        Profile finalP = p;
 
         Task<Void> task = new Task<>() {
             @Override
@@ -453,11 +450,10 @@ public class Controller {
             String details = formatException(ex);
             appendLog("FEHLER: " + details);
             showError(details);
-
+            updateAccountUi();
             setUiBusy(false);
             progressBar.setProgress(0);
             if (ex != null) ex.printStackTrace();
-            showError(ex != null ? ex.getMessage() : "Unbekannter Fehler");
         });
 
         Thread t = new Thread(task, "pack-updater");
@@ -465,32 +461,35 @@ public class Controller {
         t.start();
     }
 
+
     @FXML
     public void onPlay() {
+
+        if (!requireLoginOrPopup()) {
+            return;
+        }
+
+
         Profile p = profileCombo.getValue();
         if (p == null) {
             showError("Kein Profil ausgewählt.");
             return;
         }
 
-        String playerName = playerNameField.getText().trim();
-        if (playerName.isEmpty()) playerName = "Player";
 
-        String manifestUrl = manifestUrlField.getText().trim();
+        String manifestUrl = (p.manifestUrl() == null) ? "" : p.manifestUrl().trim();
         if (manifestUrl.isEmpty()) {
-            showError("Manifest URL fehlt.");
+            showError("Dieses Profil hat keine Manifest URL. Bitte über 'Bearbeiten' setzen.");
             return;
         }
 
-        // Profil URL sicher speichern (falls Feld geändert wurde)
-        Profile finalP = new Profile(p.name(), manifestUrl, p.serverHost(), p.serverPort(), p.joinMode());
-        profileStore.saveOrUpdateProfile(finalP);
+        Profile finalP = p; // keine Feld-URL mehr
+
 
         setUiBusy(true);
         progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
         appendLog("Play gestartet: Manifest laden, Loader installieren, dann starten...");
 
-        String finalName = playerName;
 
         Task<Void> task = new Task<>() {
             @Override
@@ -510,26 +509,13 @@ public class Controller {
 
                 MinecraftLauncherService launcher = new MinecraftLauncherService();
 
-                MinecraftLauncherService.AuthSession auth;
 
-                if (mcSession != null && mcSession.minecraftAccessToken() != null && !mcSession.minecraftAccessToken().isBlank()) {
-                    auth = new MinecraftLauncherService.AuthSession(
-                            mcSession.playerName(),
-                            mcSession.uuid(),
-                            mcSession.minecraftAccessToken(),
-                            mcSession.userType() // z.B. "msa"
-                    );
-                } else {
-                    // erstmal: offline fallback (oder du zwingst login)
-                    auth = new MinecraftLauncherService.AuthSession(
-                            finalName,
-                            "00000000000000000000000000000000",
-                            "0",
-                            "legacy"
-                    );
-                }
-
-
+                MinecraftLauncherService.AuthSession auth = new MinecraftLauncherService.AuthSession(
+                        mcSession.playerName(),
+                        mcSession.uuid(),
+                        mcSession.minecraftAccessToken(),
+                        mcSession.userType()
+                );
 
                 updateMessage("Install/Resolve/Launch...");
                 launcher.launch(
@@ -611,8 +597,23 @@ public class Controller {
     }
 
     private void setUiBusy(boolean busy) {
-        Node[] nodes = { updateButton, openFolderButton, playButton, loginButton, profileCombo, manifestUrlField, playerNameField, launcherUpdateButton };
+        // Buttons, die während Busy wirklich gesperrt werden sollen
+        Node[] nodes = {
+                updateButton,
+                playButton,
+                loginButton,
+                profileCombo,
+                launcherUpdateButton
+        };
+
         for (Node n : nodes) if (n != null) n.setDisable(busy);
+
+        // Diese zwei sollen nicht immer disabled werden:
+        // - openMainFolderButton (immer)
+        // - openFolderButton (wenn Profil vorhanden)
+        if (openFolderButton != null) {
+            openFolderButton.setDisable(profileCombo == null || profileCombo.getValue() == null);
+        }
 
         progressBar.setVisible(busy);
         if (!busy) {
@@ -621,6 +622,7 @@ public class Controller {
             setStatus(statusLabel.getText() == null || statusLabel.getText().isBlank() ? "Loading..." : statusLabel.getText(), "pillBusy");
         }
     }
+
 
 
 
@@ -671,6 +673,53 @@ public class Controller {
         Platform.runLater(() -> loginStatusLabel.setText(text));
     }
 
+    private void showDeviceCodeDialog(String code, String verificationUrl) {
+        Dialog<Void> d = new Dialog<>();
+        d.setTitle("Microsoft Login");
+        d.setHeaderText("Code kopiert ✅");
+
+        ButtonType copyBtnType = new ButtonType("Code kopieren", ButtonBar.ButtonData.LEFT);
+        ButtonType openBtnType = new ButtonType("Seite öffnen", ButtonBar.ButtonData.LEFT);
+        ButtonType closeBtnType = new ButtonType("Schließen", ButtonBar.ButtonData.CANCEL_CLOSE);
+
+        d.getDialogPane().getButtonTypes().setAll(copyBtnType, openBtnType, closeBtnType);
+
+        VBox box = new VBox(8);
+        box.setPadding(new Insets(12));
+        box.getChildren().addAll(
+                new Label("1) Browser öffnen"),
+                new Label("2) Code einfügen"),
+                new Label("3) bei Microsoft einloggen und hierher zurückkehren"),
+                new Label("Code: " + code)
+        );
+        d.getDialogPane().setContent(box);
+
+        // Buttons holen
+        Button copyBtn = (Button) d.getDialogPane().lookupButton(copyBtnType);
+        Button openBtn = (Button) d.getDialogPane().lookupButton(openBtnType);
+
+        // WICHTIG: Button-Klick darf Dialog NICHT schließen -> Event konsumieren
+        copyBtn.addEventFilter(ActionEvent.ACTION, e -> {
+            copyToClipboard(code);
+            appendLog("[LOGIN] Code kopiert: " + code);
+            e.consume();
+        });
+
+        openBtn.addEventFilter(ActionEvent.ACTION, e -> {
+            try { Desktop.getDesktop().browse(java.net.URI.create(verificationUrl)); } catch (Exception ignored) {}
+            e.consume();
+        });
+
+        // Nur Schließen/X schließen wirklich
+        loginDialog = d;
+        d.setOnHidden(e -> {
+            if (loginDialog == d) loginDialog = null;
+        });
+        d.show();
+
+    }
+
+
 
     @FXML
     private void onLoginClicked() {
@@ -688,13 +737,15 @@ public class Controller {
                 Platform.runLater(() -> {
                     appendLog("[LOGIN] Öffne: " + dc.verificationUri());
                     appendLog("[LOGIN] Code:  " + dc.userCode());
-                    setLoginStatus("Bitte Code eingeben: " + dc.userCode());
-                });
 
-                // Optional: Browser öffnen
-                try {
-                    java.awt.Desktop.getDesktop().browse(java.net.URI.create(dc.verificationUri()));
-                } catch (Exception ignored) {}
+                    copyToClipboard(dc.userCode());
+                    setLoginStatus("Code kopiert: " + dc.userCode());
+
+                    // Browser optional automatisch öffnen ODER nur Dialogbutton
+                    try { Desktop.getDesktop().browse(java.net.URI.create(dc.verificationUri())); } catch (Exception ignored) {}
+
+                    showDeviceCodeDialog(dc.userCode(), dc.verificationUri());
+                });
 
                 // 3) Polling bis fertig
                 return auth.loginWithDeviceCode(dc);
@@ -703,14 +754,19 @@ public class Controller {
 
         task.setOnSucceeded(e -> {
             mcSession = task.getValue();
+
             setLoginStatus("Eingeloggt als: " + mcSession.playerName());
             appendLog("[LOGIN] OK: " + mcSession.playerName() + " / " + mcSession.uuid());
             msStore.save(mcSession);
             appendLog("[LOGIN] Session gespeichert: " + msStore.file());
 
-            // Optional: playerNameField automatisch setzen
-            if (playerNameField != null) playerNameField.setText(mcSession.playerName());
+            updateAccountUi();
             setStatus("Fertig", "pillOk");
+
+            Platform.runLater(() -> {
+                closeLoginDialogIfOpen();
+                showWelcomeToast(mcSession.playerName());
+            });
         });
 
         task.setOnFailed(e -> {
@@ -751,6 +807,32 @@ public class Controller {
         clearLog();
     }
 
+    private boolean isLoggedIn() {
+        return mcSession != null
+                && mcSession.minecraftAccessToken() != null
+                && !mcSession.minecraftAccessToken().isBlank();
+    }
+
+    private boolean requireLoginOrPopup() {
+        if (isLoggedIn()) return true;
+
+        Alert a = new Alert(Alert.AlertType.INFORMATION);
+        a.setTitle("Login erforderlich");
+        a.setHeaderText("Du musst dich erst einloggen");
+        a.setContentText("Bitte melde dich mit Microsoft an, bevor du Minecraft starten kannst.");
+
+        ButtonType loginNow = new ButtonType("Jetzt einloggen", ButtonBar.ButtonData.OK_DONE);
+        ButtonType cancel = new ButtonType("Abbrechen", ButtonBar.ButtonData.CANCEL_CLOSE);
+        a.getButtonTypes().setAll(loginNow, cancel);
+
+        var res = a.showAndWait().orElse(cancel);
+        if (res == loginNow) {
+            onLoginClicked(); // startet deinen Device-Code Login
+        }
+        return false;
+    }
+
+
 
     private ManifestModels.Manifest fetchManifest(String url) throws Exception {
         var om = new com.fasterxml.jackson.databind.ObjectMapper();
@@ -762,4 +844,112 @@ public class Controller {
         if (resp.statusCode() != 200) throw new RuntimeException("Manifest HTTP " + resp.statusCode());
         return om.readValue(resp.body(), ManifestModels.Manifest.class);
     }
+
+    private void updateAccountUi() {
+        Platform.runLater(() -> {
+            boolean loggedIn = isLoggedIn();
+
+            String name = loggedIn ? mcSession.playerName() : "Nicht eingeloggt";
+            if (accountNameLabel != null) accountNameLabel.setText(name);
+
+            if (skinView != null) {
+                String headUrl;
+                if (loggedIn) {
+                    // 3D/2D Head Render (funktioniert easy)
+                    headUrl = "https://minotar.net/helm/" + mcSession.playerName() + "/64.png";
+                } else {
+                    // Steve fallback
+                    headUrl = "https://minotar.net/helm/Steve/64.png";
+                }
+                skinView.setImage(new Image(headUrl, true)); // backgroundLoading=true
+            }
+
+            if (loginButton != null) {
+                loginButton.setText(loggedIn ? "Logout" : "Login (Microsoft)");
+            }
+            if (playButton != null) playButton.setDisable(!loggedIn);
+
+        });
+    }
+
+
+    @FXML
+    public void onOpenMainFolder() {
+        try {
+            Path mainDir = Path.of(
+                    System.getProperty("user.home"),
+                    "AppData", "Roaming", ".modlauncher"
+            );
+
+            if (!mainDir.toFile().exists()) {
+                showError("Main-Ordner existiert nicht:\n" + mainDir);
+                return;
+            }
+
+            if (Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(mainDir.toFile());
+            } else {
+                showError("Desktop-Open wird auf diesem System nicht unterstützt.");
+            }
+        } catch (Exception e) {
+            showError("Konnte Main-Ordner nicht öffnen:\n" + e.getMessage());
+        }
+    }
+
+    @FXML
+    private void onAccountButton() {
+        if (isLoggedIn()) {
+            doLogout();
+        } else {
+            onLoginClicked();
+        }
+    }
+
+    private void doLogout() {
+        Alert a = new Alert(Alert.AlertType.CONFIRMATION);
+        a.setTitle("Logout");
+        a.setHeaderText("Wirklich ausloggen?");
+        a.setContentText("Die gespeicherte Session wird gelöscht.");
+
+        var res = a.showAndWait();
+        if (res.isEmpty() || res.get() != ButtonType.OK) return;
+
+        mcSession = null;
+        if (msStore != null) msStore.clear();
+
+        setLoginStatus("Nicht eingeloggt");
+        appendLog("[LOGIN] Logout: Session gelöscht");
+        setStatus("Bereit", "pillOk");
+        updateAccountUi();
+    }
+
+    private void copyToClipboard(String text) {
+        ClipboardContent c = new ClipboardContent();
+        c.putString(text);
+        Clipboard.getSystemClipboard().setContent(c);
+    }
+
+
+    private void closeLoginDialogIfOpen() {
+        if (loginDialog != null) {
+            try { loginDialog.close(); } catch (Exception ignored) {}
+            loginDialog = null;
+        }
+    }
+
+    private void showWelcomeToast(String name) {
+        Alert a = new Alert(Alert.AlertType.INFORMATION);
+        a.setTitle("Eingeloggt");
+        a.setHeaderText("Willkommen, " + name + "!");
+        a.setContentText("Du bist nun erfolgreich eingeloggt.");
+        a.getButtonTypes().setAll(ButtonType.OK);
+        a.show();
+
+        // Auto-close nach 2 Sekunden
+        Timeline t = new Timeline(new KeyFrame(Duration.seconds(2), e -> a.close()));
+        t.setCycleCount(1);
+        t.play();
+    }
+
+
 }
