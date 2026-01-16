@@ -7,7 +7,7 @@ Der Launcher bringt **seinen eigenen Runtime-Stack mit**, benötigt **kein insta
 
 ## Features
 
-- 🧩 Unterstützung für **Vanilla, Forge, Fabric** (erweiterbar)
+- 🧩 Unterstützung für **Vanilla, Forge, Fabric** (in Zukunft vielleicht auch Quilt und NeoForge)
 - 🚀 Eigene **Java Runtime** (kein externes Java nötig)
 - 🔄 **Automatisches & manuelles Self-Update** über GitHub Releases
 - 🎨 Moderne JavaFX-Oberfläche (AtlantaFX / PrimerDark)
@@ -39,7 +39,7 @@ Der Launcher:
 
 ### Voraussetzungen
 - JDK **24**
-- Maven (Wrapper enthalten)
+- Maven
 - Windows (jpackage MSI)
 
 ### Build
