@@ -114,13 +114,6 @@ jobs:
           git tag ${{ steps.ver.outputs.tag }}
           git push origin master --follow-tags
 
-      # NIGHTLY: version nur für den Build setzen (ohne commit)
-      - name: Set build version (nightly only, no commit)
-        if: github.ref_name == 'nightly'
-        shell: powershell
-        run: |
-          mvn -B versions:set "-DnewVersion=${{ steps.ver.outputs.version }}" "-DgenerateBackupPoms=false"
-
       - name: Build (clean package + jpackage)
         shell: powershell
         run: |
@@ -141,7 +134,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
-          name: ModLauncher ${{ steps.ver.outputs.version }}
+          name: ModLauncher ${{ steps.ver.outputs.tag }}
           prerelease: ${{ steps.ver.outputs.prerelease }}
           generate_release_notes: true
           files: |
