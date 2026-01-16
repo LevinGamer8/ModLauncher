@@ -1,40 +1,73 @@
 # ModLauncher
 
-Ein moderner, eigenständiger Minecraft-Mod-Launcher für **Windows**, entwickelt mit **Java 24**, **JavaFX** und **jpackage**.
+Ein **moderner, eigenständiger Minecraft Mod Launcher für Windows**, der ein zentrales Problem löst:  
+**Mods, Configs und Versionen müssen nicht mehr manuell gepflegt werden.**
 
-Der Launcher bringt **seine eigene Java-Runtime** mit, benötigt **kein installiertes Java** und kann sich **selbst aktualisieren**.
+Der ModLauncher stellt sicher, dass **alle Spieler automatisch exakt die gleiche Client-Umgebung** haben –  
+ohne Java-Installation, ohne Mod-Chaos, ohne Support-Albtraum.
 
 ---
 
-## Features
+## Warum ModLauncher?
 
-- Unterstützung für **Vanilla, Forge, Fabric**  
+Typische Probleme bei Mod-Projekten:
+- Spieler haben Mods nicht oder in falscher Version
+- Config-Änderungen müssen manuell erklärt werden
+- Discord-Ankündigungen werden übersehen
+- Server-Join schlägt fehl → Frust & Support
+
+**ModLauncher löst genau das.**
+
+---
+
+## Kernfunktionen
+
+- 🧩 Unterstützung für **Vanilla, Forge, Fabric**  
   *(Quilt / NeoForge geplant)*
-- Integrierte **Java Runtime** – kein externes Java erforderlich
-- **Automatische & manuelle Updates** über GitHub Releases
-- Moderne **JavaFX-UI** (AtlantaFX / PrimerDark)
-- **Windows-Installer (MSI)** inkl. Startmenü & sauberer Deinstallation
-- Saubere, modulare **Maven-Projektstruktur**
+- 🔄 **Automatische Installation & Updates** von:
+  - Mods
+  - Configs
+  - weiteren Projektdateien
+- 📦 **Zentrale Projektstruktur**  
+  → Host stellt Dateien bereit, Clients synchronisieren automatisch
+- 🚀 **Eigene Java Runtime integriert**  
+  → kein installiertes Java nötig
+- 🔁 **Self-Updater** über GitHub Releases
+- 🎨 Moderne **JavaFX UI** (AtlantaFX / PrimerDark)
+- 🪟 **Windows MSI Installer**
+  - Startmenü-Eintrag
+  - Saubere Deinstallation
+- 🛠 Sauberes, modulares **Maven-Projekt**
 
 ---
 
-## Installation
+## Zielgruppe
 
-1. **MSI-Installer** aus den GitHub Releases herunterladen
+- Minecraft-Projektleiter
+- Modpack-Entwickler
+- Private & öffentliche Mod-Server
+- Communities, die **keine Lust auf Client-Support** haben
+
+---
+
+## Installation (Spieler)
+
+1. MSI-Datei aus den **GitHub Releases** herunterladen
 2. Installer ausführen
-3. Starten über:
+3. Launcher starten über:
    - Startmenü → **ModLauncher**
-   - oder direkt:  
+   - oder  
      `C:\Program Files\ModLauncher\ModLauncher.exe`
+
+➡️ Java muss **nicht** installiert sein.
 
 ---
 
 ## Updates
 
-Der Launcher:
-- prüft **automatisch beim Start** auf neue Versionen
-- bietet **manuelle Updates** per Button
-- ersetzt sich **selbstständig und sauber**, ohne Neuinstallation
+- Automatische Update-Prüfung beim Start
+- Manuelle Update-Prüfung per Button
+- Launcher ersetzt sich selbst **ohne Neuinstallation**
 
 ---
 
@@ -43,7 +76,7 @@ Der Launcher:
 ### Voraussetzungen
 - **JDK 24**
 - **Maven**
-- **Windows** (für MSI-Build mit jpackage)
+- **Windows** (für MSI-Build via jpackage)
 
 ### Build
 
