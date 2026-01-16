@@ -49,9 +49,16 @@ public final class MinecraftLauncherService {
 
         // --- 1) Vanilla Basis (Assets/Index/Client/Libraries via FlowUpdater) ---
         vanillaInstaller.ensureVanillaInstalled(sharedRoot, spec.mcVersion(), L);
+        mojang.ensureAssetIndex(sharedRoot, spec.mcVersion());
 
         // optional: Root-Müll bereinigen (best-effort)
-        cleanupSharedRootArtifacts(sharedRoot, L);
+        cleanupSharedRootArtifacts(sharedRoot, spec.mcVersion(), L);
+
+        Path assetIndex = sharedRoot.resolve("assets").resolve("indexes").resolve(spec.mcVersion() + ".json");
+        if (!Files.exists(assetIndex)) {
+            throw new IllegalStateException("Asset index fehlt nach Install: " + assetIndex);
+        }
+
 
         // --- 2) Version JSON + Client Jar garantieren (Vanilla) ---
         mojang.ensureVersionJson(sharedRoot, spec.mcVersion());
@@ -94,7 +101,13 @@ public final class MinecraftLauncherService {
 
         // --- 5) Classpath sicherstellen (Libraries + ggf. Version-Jar) ---
         List<Path> cp = new ArrayList<>(libraryService.ensureClasspath(sharedRoot, v));
-        ensureVersionJarOnClasspath(cp, sharedRoot, versionId);
+
+        // Forge BootstrapLauncher: Game-JAR darf NICHT in -cp sein, sonst JPMS Konflikte
+        if (spec.loaderType() == LoaderType.FORGE) {
+            removeGameJarFromClasspath(cp, sharedRoot, v, versionId);
+        } else {
+            ensureGameJarOnClasspath(cp, sharedRoot, v, versionId);
+        }
 
         // --- 6) Vars für ${...} Platzhalter aus JSON ---
         Map<String, String> vars = new HashMap<>();
@@ -118,6 +131,12 @@ public final class MinecraftLauncherService {
         vars.put("assets_root", sharedRoot.resolve("assets").toAbsolutePath().toString());
         vars.put("assets_index_name", spec.mcVersion());
 
+        // Defaults, damit --width/--height nie ohne Wert bleiben
+        vars.putIfAbsent("resolution_width", "854");
+        vars.putIfAbsent("resolution_height", "480");
+
+
+
         // Launcher identity (kommt in manchen JSONs vor)
         vars.put("launcher_name", LAUNCHER_NAME);
         vars.put("launcher_version", LAUNCHER_VERSION);
@@ -127,6 +146,14 @@ public final class MinecraftLauncherService {
 
         List<String> jvmArgs = sanitizeUnresolvedArgs(argsBuilder.buildJvmArgs(v, vars));
         List<String> gameArgs = sanitizeUnresolvedArgs(argsBuilder.buildGameArgs(v, vars));
+
+        gameArgs = dropOptionsMissingValue(gameArgs, Set.of(
+                "--width", "--height",
+                "--clientId", "--xuid",
+                "--quickPlayPath", "--quickPlaySingleplayer", "--quickPlayMultiplayer", "--quickPlayRealms"
+        ));
+        gameArgs.removeIf("--demo"::equals);
+
 
         // Memory: falls JSON nichts setzt, setzen wir es hier (ohne Forge/Fabric kaputt zu machen)
         jvmArgs = ensureMemoryArgs(jvmArgs, spec.memoryMb());
@@ -168,6 +195,30 @@ public final class MinecraftLauncherService {
         return log != null ? log : (s -> {});
     }
 
+    private static List<String> dropOptionsMissingValue(List<String> args, Set<String> valueOpts) {
+        List<String> out = new ArrayList<>(args.size());
+        for (int i = 0; i < args.size(); i++) {
+            String a = args.get(i);
+            if (!valueOpts.contains(a)) {
+                out.add(a);
+                continue;
+            }
+
+            // Option erwartet einen Wert
+            if (i + 1 >= args.size()) continue;
+            String next = args.get(i + 1);
+
+            // fehlt oder sieht aus wie nächste Option => Option droppen
+            if (next == null || next.isBlank() || next.startsWith("--")) continue;
+
+            out.add(a);
+            out.add(next);
+            i++; // value consumed
+        }
+        return out;
+    }
+
+
     /**
      * Entfernt nur wirklich unresolved Tokens, die NICHT ersetzt wurden.
      * Wenn ArgsBuilder korrekt ersetzt, bleibt hier praktisch alles drin.
@@ -176,11 +227,13 @@ public final class MinecraftLauncherService {
         List<String> out = new ArrayList<>(args.size());
         for (String a : args) {
             if (a == null) continue;
+            if (a.isBlank()) continue;     // WICHTIG
             if (a.contains("${")) continue; // Platzhalter nicht aufgelöst -> raus
             out.add(a);
         }
         return out;
     }
+
 
     private static List<String> ensureMemoryArgs(List<String> jvmArgs, int memoryMb) {
         if (memoryMb <= 0) return jvmArgs;
@@ -197,18 +250,29 @@ public final class MinecraftLauncherService {
         return out;
     }
 
-    private static void ensureVersionJarOnClasspath(List<Path> cp, Path sharedRoot, String versionId) throws Exception {
-        Path jar = sharedRoot.resolve("versions").resolve(versionId).resolve(versionId + ".jar");
-        if (!Files.exists(jar)) {
-            // falls es ein inherited/proxy versionId ist, kann das Jar auch beim base mcVersion liegen
-            // aber normalerweise sollte es existieren, sonst stimmt der Install/FlowUpdater nicht.
-            throw new IllegalStateException("Version-Jar fehlt: " + jar);
+    private static void ensureGameJarOnClasspath(List<Path> cp, Path sharedRoot, JsonObject merged, String versionId) throws Exception {
+        // Mojang/Forge: "jar" sagt, welches versions/<jarId>/<jarId>.jar genutzt wird.
+        // Wenn nicht vorhanden, fallback auf inheritsFrom, sonst versionId.
+        String jarId = versionId;
+
+        if (merged.has("jar") && merged.get("jar").isJsonPrimitive()) {
+            jarId = merged.get("jar").getAsString();
+        } else if (merged.has("inheritsFrom") && merged.get("inheritsFrom").isJsonPrimitive()) {
+            jarId = merged.get("inheritsFrom").getAsString();
         }
+
+        Path jar = sharedRoot.resolve("versions").resolve(jarId).resolve(jarId + ".jar");
+        if (!Files.exists(jar)) {
+            throw new IllegalStateException("Game-Jar fehlt: " + jar + " (versionId=" + versionId + ", jarId=" + jarId + ")");
+        }
+
+        Path norm = jar.toAbsolutePath().normalize();
         for (Path p : cp) {
-            if (p.toAbsolutePath().normalize().equals(jar.toAbsolutePath().normalize())) return;
+            if (p.toAbsolutePath().normalize().equals(norm)) return;
         }
         cp.add(jar);
     }
+
 
     private static Path downloadForgeInstallerJar(Path sharedRoot, String mcVersion, String forgeVersion, Consumer<String> log) throws Exception {
         Path dir = sharedRoot.resolve("installers").resolve("forge").resolve(mcVersion + "-" + forgeVersion);
@@ -243,37 +307,79 @@ public final class MinecraftLauncherService {
         return out;
     }
 
-    private static void cleanupSharedRootArtifacts(Path sharedRoot, Consumer<String> log) {
-        try (var s = Files.list(sharedRoot)) {
-            s.filter(Files::isRegularFile).forEach(p -> {
-                String name = p.getFileName().toString();
+    private static void removeGameJarFromClasspath(List<Path> cp, Path sharedRoot, JsonObject merged, String versionId) {
+        String jarId = versionId;
 
-                if (name.equalsIgnoreCase("client.jar")) {
-                    try {
-                        Files.deleteIfExists(p);
-                        log.accept("[CLEANUP] gelöscht: " + p);
-                    } catch (Exception ignored) {}
-                    return;
-                }
+        if (merged.has("jar") && merged.get("jar").isJsonPrimitive()) {
+            jarId = merged.get("jar").getAsString();
+        } else if (merged.has("inheritsFrom") && merged.get("inheritsFrom").isJsonPrimitive()) {
+            jarId = merged.get("inheritsFrom").getAsString();
+        }
 
-                // sharedRoot/1.20.1.json -> versions/1.20.1/1.20.1.json
-                if (name.endsWith(".json") && name.matches("[0-9]+\\.[0-9]+(\\.[0-9]+)?\\.json")) {
-                    String ver = name.substring(0, name.length() - 5);
-                    Path dst = sharedRoot.resolve("versions").resolve(ver).resolve(ver + ".json");
-                    try {
-                        Files.createDirectories(dst.getParent());
-                        if (!Files.exists(dst)) {
-                            Files.move(p, dst, StandardCopyOption.REPLACE_EXISTING);
-                            log.accept("[CLEANUP] moved " + p + " -> " + dst);
-                        } else {
-                            Files.deleteIfExists(p);
-                            log.accept("[CLEANUP] deleted duplicate " + p);
-                        }
-                    } catch (Exception ignored) {}
-                }
-            });
-        } catch (Exception ignored) {}
+        Path gameJar = sharedRoot.resolve("versions").resolve(jarId).resolve(jarId + ".jar")
+                .toAbsolutePath().normalize();
+
+        cp.removeIf(p -> p != null && p.toAbsolutePath().normalize().equals(gameJar));
     }
+
+
+    private static void cleanupSharedRootArtifacts(Path sharedRoot, String mcVersion, Consumer<String> log) {
+        try {
+            // --- 1) shared/<mcVersion>.json ---
+            Path rootJson = sharedRoot.resolve(mcVersion + ".json");
+            if (Files.exists(rootJson) && Files.size(rootJson) > 0) {
+                String txt = Files.readString(rootJson);
+
+                boolean looksLikeAssetIndex = txt.contains("\"objects\"");     // Asset-Index hat immer objects
+                boolean looksLikeVersionJson = txt.contains("\"libraries\"") || txt.contains("\"downloads\"") || txt.contains("\"mainClass\"");
+
+                if (looksLikeAssetIndex && !looksLikeVersionJson) {
+                    Path dst = sharedRoot.resolve("assets").resolve("indexes").resolve(mcVersion + ".json");
+                    Files.createDirectories(dst.getParent());
+
+                    if (Files.exists(dst) && Files.size(dst) > 0) {
+                        Files.deleteIfExists(rootJson);
+                        log.accept("[CLEANUP] deleted duplicate " + rootJson);
+                    } else {
+                        Files.move(rootJson, dst, StandardCopyOption.REPLACE_EXISTING);
+                        log.accept("[CLEANUP] moved asset index " + rootJson + " -> " + dst);
+                    }
+                } else {
+                    // als Version JSON behandeln
+                    Path dst = sharedRoot.resolve("versions").resolve(mcVersion).resolve(mcVersion + ".json");
+                    Files.createDirectories(dst.getParent());
+
+                    if (Files.exists(dst) && Files.size(dst) > 0) {
+                        Files.deleteIfExists(rootJson);
+                        log.accept("[CLEANUP] deleted duplicate " + rootJson);
+                    } else {
+                        Files.move(rootJson, dst, StandardCopyOption.REPLACE_EXISTING);
+                        log.accept("[CLEANUP] moved version json " + rootJson + " -> " + dst);
+                    }
+                }
+            }
+
+            // --- 2) shared/client.jar ---
+            Path rootClientJar = sharedRoot.resolve("client.jar");
+            if (Files.exists(rootClientJar) && Files.size(rootClientJar) > 0) {
+                Path dst = sharedRoot.resolve("versions").resolve(mcVersion).resolve(mcVersion + ".jar");
+                Files.createDirectories(dst.getParent());
+
+                if (Files.exists(dst) && Files.size(dst) > 0) {
+                    Files.deleteIfExists(rootClientJar);
+                    log.accept("[CLEANUP] deleted duplicate " + rootClientJar);
+                } else {
+                    Files.move(rootClientJar, dst, StandardCopyOption.REPLACE_EXISTING);
+                    log.accept("[CLEANUP] moved client jar " + rootClientJar + " -> " + dst);
+                }
+            }
+
+        } catch (Exception e) {
+            log.accept("[CLEANUP] warning: " + e.getMessage());
+        }
+    }
+
+
 
     private static boolean isAtLeast13(String mcVersion) {
         try {

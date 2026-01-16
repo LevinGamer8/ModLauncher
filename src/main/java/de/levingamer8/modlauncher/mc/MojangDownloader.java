@@ -85,6 +85,32 @@ public final class MojangDownloader {
         return vJar;
     }
 
+    public Path ensureAssetIndex(Path sharedRoot, String versionId) throws Exception {
+        Path out = sharedRoot.resolve("assets").resolve("indexes").resolve(versionId + ".json");
+        if (Files.exists(out) && Files.size(out) > 0) return out;
+
+        Path vJsonPath = ensureVersionJson(sharedRoot, versionId);
+        JsonObject vJson = JsonParser.parseString(Files.readString(vJsonPath)).getAsJsonObject();
+
+        if (!vJson.has("assetIndex")) {
+            throw new IllegalStateException("assetIndex fehlt in version json: " + versionId);
+        }
+
+        JsonObject ai = vJson.getAsJsonObject("assetIndex");
+        String url = ai.get("url").getAsString();
+
+        Files.createDirectories(out.getParent());
+        HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(60))
+                .GET().build();
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() != 200) throw new IOException("HTTP " + resp.statusCode() + " für " + url);
+
+        Files.writeString(out, resp.body(), StandardCharsets.UTF_8);
+        return out;
+    }
+
+
 
     private JsonObject getJson(String url) throws Exception {
         HttpRequest req = HttpRequest.newBuilder(URI.create(url))
