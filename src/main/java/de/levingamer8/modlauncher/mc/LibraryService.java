@@ -139,7 +139,7 @@ public final class LibraryService {
 
         // fallback: maven path
         String name = lib.get("name").getAsString();
-        String rel = ForgeInstaller1122Plus.mavenPathFromCoord(name);
+        String rel = mavenPathFromCoord(name);
         Path out = sharedRoot.resolve("libraries").resolve(rel);
         Files.createDirectories(out.getParent());
         if (!Files.exists(out)) downloadTo(baseUrl + rel, out);
@@ -167,7 +167,7 @@ public final class LibraryService {
         if (p.length < 3) return null;
 
         String coordWithClassifier = p[0] + ":" + p[1] + ":" + p[2] + ":" + classifierKey;
-        String rel = ForgeInstaller1122Plus.mavenPathFromCoord(coordWithClassifier);
+        String rel = mavenPathFromCoord(coordWithClassifier);
 
         Path out = sharedRoot.resolve("libraries").resolve(rel);
         Files.createDirectories(out.getParent());
@@ -225,6 +225,30 @@ public final class LibraryService {
             if (osMatch) allowed = "allow".equalsIgnoreCase(action);
         }
         return allowed;
+    }
+
+    public static String mavenPathFromCoord(String coord) {
+        String ext = "jar";
+        String c = coord;
+
+        int at = c.lastIndexOf('@');
+        if (at >= 0) {
+            ext = c.substring(at + 1).trim();
+            c = c.substring(0, at);
+            if (ext.isEmpty()) ext = "jar";
+        }
+
+        String[] p = c.split(":");
+        if (p.length < 3) throw new IllegalArgumentException("Ungültige maven coord: " + coord);
+
+        String group = p[0];
+        String artifact = p[1];
+        String version = p[2];
+        String classifier = (p.length >= 4) ? p[3] : null;
+
+        String base = group.replace('.', '/') + "/" + artifact + "/" + version + "/";
+        String file = artifact + "-" + version + (classifier != null ? "-" + classifier : "") + "." + ext;
+        return base + file;
     }
 
     private void downloadTo(String url, Path out) throws Exception {

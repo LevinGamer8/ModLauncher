@@ -6,6 +6,10 @@ import de.levingamer8.modlauncher.core.PackUpdater;
 import de.levingamer8.modlauncher.core.ProfileStore;
 import de.levingamer8.modlauncher.core.ProfileStore.Profile;
 import de.levingamer8.modlauncher.core.LoaderType;
+import de.levingamer8.modlauncher.host.HostManifest;
+import de.levingamer8.modlauncher.host.ProjectHostService;
+import de.levingamer8.modlauncher.mc.FabricVersionResolver;
+import de.levingamer8.modlauncher.mc.ForgeVersionResolver;
 import de.levingamer8.modlauncher.mc.MinecraftLauncherService;
 
 import de.levingamer8.modlauncher.auth.MicrosoftSessionStore;
@@ -950,6 +954,347 @@ public class Controller {
         t.setCycleCount(1);
         t.play();
     }
+
+
+    private static class HostDialogResult {
+        String projectId, name, version;
+        String mcVersion, loader, loaderVersion;
+        String filesBaseUrl;
+        String uploadUrl;
+        String bearerToken;
+        boolean doUpload;
+
+        ProjectHostService.Selection selection;
+    }
+
+    private HostDialogResult showHostDialog(Profile p) {
+        Dialog<HostDialogResult> d = new Dialog<>();
+        d.setTitle("Projekt hosten");
+        d.setHeaderText("Wähle, was aus der Instanz hochgeladen werden soll.");
+
+        ButtonType ok = new ButtonType("Build", ButtonBar.ButtonData.OK_DONE);
+        ButtonType buildUpload = new ButtonType("Build + Upload", ButtonBar.ButtonData.APPLY);
+        d.getDialogPane().getButtonTypes().addAll(ok, buildUpload, ButtonType.CANCEL);
+
+        GridPane gp = new GridPane();
+        gp.setHgap(10); gp.setVgap(10); gp.setPadding(new Insets(12));
+
+        TextField projectId = new TextField(p.name().toLowerCase().replace(" ", "-"));
+        TextField name = new TextField(p.name());
+        TextField version = new TextField("1.0.0");
+
+        TextField mcVersion = new TextField("1.20.1");
+
+        // Loader als Auswahl, damit es keine Tippfehler gibt
+        ComboBox<String> loader = new ComboBox<>();
+        loader.getItems().setAll("fabric", "forge");
+        loader.getSelectionModel().select("fabric");
+
+        TextField loaderVersion = new TextField("");
+
+        TextField filesBaseUrl = new TextField("https://server.tld/projects/" + projectId.getText() + "/files/");
+        TextField uploadUrl = new TextField("https://server.tld/api/upload");
+        PasswordField token = new PasswordField();
+
+        CheckBox cbMods = new CheckBox("mods/ (files)"); cbMods.setSelected(true);
+        CheckBox cbConfig = new CheckBox("config/ (overrides)"); cbConfig.setSelected(true);
+        CheckBox cbServersDat = new CheckBox("servers.dat (overrides)"); cbServersDat.setSelected(false);
+        CheckBox cbOptions = new CheckBox("options.txt (overrides)"); cbOptions.setSelected(false);
+        CheckBox cbKubejs = new CheckBox("kubejs/ (overrides)"); cbKubejs.setSelected(false);
+        CheckBox cbDefaultConfigs = new CheckBox("defaultconfigs/ (overrides)"); cbDefaultConfigs.setSelected(false);
+        CheckBox cbShaderpacks = new CheckBox("shaderpacks/ (files)"); cbShaderpacks.setSelected(false);
+        CheckBox cbResourcepacks = new CheckBox("resourcepacks/ (files)"); cbResourcepacks.setSelected(false);
+
+
+
+
+
+        // nach dem Erstellen von mcVersionField, loaderBox, loaderVersionField:
+        wireLoaderAutoSuggest(mcVersion, loader, loaderVersion);
+
+
+        int r = 0;
+        gp.addRow(r++, new Label("Project ID:"), projectId);
+        gp.addRow(r++, new Label("Name:"), name);
+        gp.addRow(r++, new Label("Version:"), version);
+
+        gp.addRow(r++, new Label("MC Version:"), mcVersion);
+        gp.addRow(r++, new Label("Loader:"), loader);
+        gp.addRow(r++, new Label("Loader Version:"), loaderVersion);
+
+        gp.addRow(r++, new Label("filesBaseUrl:"), filesBaseUrl);
+        gp.addRow(r++, new Label("uploadUrl:"), uploadUrl);
+        gp.addRow(r++, new Label("Bearer Token:"), token);
+
+        VBox box = new VBox(6, cbMods, cbConfig, cbServersDat, cbOptions, cbKubejs, cbDefaultConfigs, cbShaderpacks, cbResourcepacks);
+        box.setPadding(new Insets(6,0,0,0));
+        gp.addRow(r++, new Label("Auswahl:"), box);
+
+        ColumnConstraints c1 = new ColumnConstraints(); c1.setMinWidth(120);
+        ColumnConstraints c2 = new ColumnConstraints(); c2.setHgrow(Priority.ALWAYS);
+        gp.getColumnConstraints().setAll(c1, c2);
+
+        d.getDialogPane().setContent(gp);
+
+        Node okBtn = d.getDialogPane().lookupButton(ok);
+        okBtn.disableProperty().bind(projectId.textProperty().isEmpty().or(filesBaseUrl.textProperty().isEmpty()));
+
+        d.setResultConverter(bt -> {
+            if (bt == ButtonType.CANCEL) return null;
+
+            HostDialogResult res = new HostDialogResult();
+            res.projectId = projectId.getText().trim();
+            res.name = name.getText().trim();
+            res.version = version.getText().trim();
+
+            res.mcVersion = mcVersion.getText().trim();
+            res.loader = loader.getValue() == null ? "" : loader.getValue().trim();
+            res.loaderVersion = loaderVersion.getText().trim();
+
+            res.filesBaseUrl = filesBaseUrl.getText().trim();
+            res.uploadUrl = uploadUrl.getText().trim();
+            res.bearerToken = token.getText();
+
+            res.doUpload = (bt == buildUpload);
+
+            res.selection = new ProjectHostService.Selection(
+                    cbMods.isSelected(),
+                    cbConfig.isSelected(),
+                    cbServersDat.isSelected(),
+                    cbOptions.isSelected(),
+                    cbKubejs.isSelected(),
+                    cbDefaultConfigs.isSelected(),
+                    cbShaderpacks.isSelected(),
+                    cbResourcepacks.isSelected()
+            );
+
+            return res;
+        });
+
+        return d.showAndWait().orElse(null);
+    }
+
+    @FXML
+    public void onProjectHost() {
+
+        // 1) Instanz explizit auswählen
+        Profile p = pickInstanceToHost();
+        if (p == null) return;
+
+        Path instanceDir = profileStore.instanceDir(p.name());
+        if (!instanceDir.toFile().exists()) {
+            showError("Instanz existiert nicht: " + instanceDir);
+            return;
+        }
+
+        // 2) Host-Dialog
+        HostDialogResult cfg = showHostDialog(p);
+        if (cfg == null) return;
+
+        setUiBusy(true);
+        progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
+        appendLog("[HOST] Start für Instanz: " + p.name());
+
+        Task<Void> task = new Task<>() {
+            @Override
+            protected Void call() throws Exception {
+                updateMessage("Build...");
+
+                HostManifest m = new HostManifest();
+                m.projectId = cfg.projectId;
+                m.name = cfg.name;
+                m.version = cfg.version;
+                m.minecraft.version = cfg.mcVersion;
+                m.minecraft.loader = cfg.loader;
+                m.minecraft.loaderVersion = cfg.loaderVersion;
+
+                m.filesBaseUrl = cfg.filesBaseUrl;
+                m.overridesUrl = cfg.filesBaseUrl.replace("/files/", "/overrides.zip");
+
+                Path outDir = profileStore.baseDir().resolve("host_builds").resolve(cfg.projectId);
+
+                ProjectHostService.build(
+                        instanceDir,
+                        m,
+                        cfg.selection,
+                        outDir,
+                        (msg) -> appendLog(msg),
+                        (done, total) -> Platform.runLater(() -> {
+                            if (total <= 0) progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
+                            else progressBar.setProgress((double) done / (double) total);
+                        })
+                );
+
+                if (cfg.doUpload) {
+                    updateMessage("Upload...");
+                    Platform.runLater(() -> progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS));
+
+                    ProjectHostService.uploadPutPathQuery(
+                            cfg.uploadUrl,
+                            cfg.projectId,
+                            outDir,
+                            cfg.bearerToken,
+                            (msg) -> appendLog(msg),
+                            (done, total) -> Platform.runLater(() -> {
+                                if (total <= 0) progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
+                                else progressBar.setProgress((double) done / (double) total);
+                            })
+                    );
+                }
+
+                updateMessage("Fertig");
+                return null;
+            }
+        };
+
+        statusLabel.textProperty().bind(task.messageProperty());
+
+        task.setOnSucceeded(e -> {
+            statusLabel.textProperty().unbind();
+            setStatus("Fertig", "pillOk");
+            appendLog("[HOST] Done.");
+            setUiBusy(false);
+            progressBar.setProgress(1);
+        });
+
+        task.setOnFailed(e -> {
+            statusLabel.textProperty().unbind();
+            setStatus("Fehler", "pillError");
+            Throwable ex = task.getException();
+            appendLog("[HOST] ERROR: " + (ex != null ? formatException(ex) : "unknown"));
+            setUiBusy(false);
+            progressBar.setProgress(0);
+            showError(ex != null ? ex.getMessage() : "Unbekannter Fehler");
+            if (ex != null) ex.printStackTrace();
+        });
+
+        Thread t = new Thread(task, "project-host");
+        t.setDaemon(true);
+        t.start();
+    }
+
+
+    private Profile pickInstanceToHost() {
+        var profiles = profileStore.loadProfiles();
+        if (profiles == null || profiles.isEmpty()) {
+            showError("Keine Instanzen/Profiles vorhanden.");
+            return null;
+        }
+
+        Dialog<Profile> d = new Dialog<>();
+        d.setTitle("Instanz auswählen");
+        d.setHeaderText("Welche Instanz möchtest du hosten?");
+
+        ButtonType ok = new ButtonType("Weiter", ButtonBar.ButtonData.OK_DONE);
+        d.getDialogPane().getButtonTypes().addAll(ok, ButtonType.CANCEL);
+
+        ComboBox<Profile> cb = new ComboBox<>();
+        cb.getItems().setAll(profiles);
+
+        // Anzeige Name
+        cb.setCellFactory(x -> new ListCell<>() {
+            @Override protected void updateItem(Profile item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? "" : item.name());
+            }
+        });
+        cb.setButtonCell(new ListCell<>() {
+            @Override protected void updateItem(Profile item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? "" : item.name());
+            }
+        });
+
+        // Vorauswahl: aktuell gewähltes Profil, sonst erstes
+        Profile current = profileCombo != null ? profileCombo.getValue() : null;
+        if (current != null) cb.getSelectionModel().select(current);
+        else cb.getSelectionModel().selectFirst();
+
+        VBox box = new VBox(10, new Label("Instanz:"), cb);
+        box.setPadding(new Insets(12));
+        d.getDialogPane().setContent(box);
+
+        Node okBtn = d.getDialogPane().lookupButton(ok);
+        okBtn.setDisable(cb.getValue() == null);
+        cb.valueProperty().addListener((o, a, b) -> okBtn.setDisable(b == null));
+
+        d.setResultConverter(bt -> bt == ok ? cb.getValue() : null);
+
+        return d.showAndWait().orElse(null);
+    }
+
+
+    private void wireLoaderAutoSuggest(
+            TextField mcVersionField,
+            ComboBox<String> loaderBox,
+            TextField loaderVersionField
+    ) {
+        // merkt sich, ob wir das Feld automatisch gesetzt haben
+        final boolean[] autoSet = { false };
+
+        Runnable trigger = () -> {
+            String l = loaderBox.getValue();
+            String mc = mcVersionField.getText() == null ? "" : mcVersionField.getText().trim();
+            if (l == null || mc.isEmpty()) return;
+
+            // NICHT überschreiben, wenn User schon was eingetragen hat (und es nicht von uns kam)
+            String current = loaderVersionField.getText() == null ? "" : loaderVersionField.getText().trim();
+            if (!current.isEmpty() && !autoSet[0]) return;
+
+            Task<String> t = new Task<>() {
+                @Override protected String call() throws Exception {
+                    if ("forge".equalsIgnoreCase(l)) {
+                        return ForgeVersionResolver.resolveRecommendedOrLatest(mc);
+                    }
+                    if ("fabric".equalsIgnoreCase(l)) {
+                        return FabricVersionResolver.resolveLatestStable(mc);
+                    }
+                    return "";
+                }
+            };
+
+            t.setOnSucceeded(e -> {
+                String v = t.getValue();
+                if (v == null || v.isBlank()) {
+                    appendLog("[LOADER] Keine Version gefunden für " + l + " / MC " + mc);
+                    return;
+                }
+                loaderVersionField.setText(v);
+                autoSet[0] = true;
+                appendLog("[LOADER] Auto: " + l + " " + mc + " -> " + v);
+            });
+
+            t.setOnFailed(e -> {
+                Throwable ex = t.getException();
+                appendLog("[LOADER] Resolve failed: " + (ex != null ? ex.getMessage() : "unknown"));
+            });
+
+            Thread th = new Thread(t, "loader-resolve");
+            th.setDaemon(true);
+            th.start();
+        };
+
+        // Wenn User manuell tippt, ist es nicht mehr "auto"
+        loaderVersionField.textProperty().addListener((obs, o, n) -> {
+            if (n == null) return;
+            // wenn User ändert (nicht via setText aus trigger) kannst du schwer erkennen,
+            // aber pragmatisch: sobald er fokussiert ist und tippt -> autoSet=false
+            // -> das machen wir über focus listener:
+        });
+
+        loaderVersionField.focusedProperty().addListener((obs, was, is) -> {
+            if (is) autoSet[0] = false; // User übernimmt Kontrolle
+        });
+
+        // Trigger bei Änderungen
+        mcVersionField.textProperty().addListener((o,a,b) -> trigger.run());
+        loaderBox.valueProperty().addListener((o,a,b) -> trigger.run());
+
+        // 1x initial
+        Platform.runLater(trigger);
+    }
+
+
 
 
 }

@@ -24,7 +24,6 @@ public final class MinecraftLauncherService {
 
     // Forge
     private final ModernForgeInstaller modernForge = new ModernForgeInstaller();
-    private final ForgeInstaller1122Plus legacyForge = new ForgeInstaller1122Plus();
 
     private final MojangVersionResolver resolver = new MojangVersionResolver();
     private final LibraryService libraryService = new LibraryService();
@@ -83,14 +82,9 @@ public final class MinecraftLauncherService {
                 throw new IllegalStateException("Forge loaderVersion fehlt im Manifest/LaunchSpec (z.B. 47.4.10).");
             }
 
-            if (isAtLeast13(mc)) {
-                // Modern Forge (1.13+)
+                // Modern Forge (1.13+) Probably doesnt work for older versions NEED TO TEST
                 versionId = modernForge.installForge(sharedRoot, mc, forgeVer, L);
-            } else {
-                // Legacy Forge (z.B. 1.12.2)
-                Path installerJar = downloadForgeInstallerJar(sharedRoot, mc, forgeVer, L);
-                versionId = legacyForge.installForgeClient(sharedRoot, mc, forgeVer, installerJar, L);
-            }
+
 
         } else {
             throw new IllegalStateException("Unbekannter LoaderType: " + spec.loaderType());
