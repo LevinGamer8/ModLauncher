@@ -14,7 +14,8 @@ public class App extends Application {
         Application.setUserAgentStylesheet(new PrimerDark().getUserAgentStylesheet());
 
         FXMLLoader loader = new FXMLLoader(App.class.getResource("/de/levingamer8/modlauncher/ui/app.fxml"));
-        Scene scene = new Scene(loader.load(), 980, 640);
+        Scene scene = new Scene(loader.load(), 1400, 900);
+
 
         scene.getStylesheets().add(
                 Objects.requireNonNull(App.class.getResource("/de/levingamer8/modlauncher/ui/theme.css")).toExternalForm()
@@ -30,6 +31,9 @@ public class App extends Application {
 
         stage.setTitle("ModLauncher");
         stage.setScene(scene);
+        stage.setMinWidth(1200);
+        stage.setMinHeight(780);
+        stage.centerOnScreen();
         stage.show();
     }
 }

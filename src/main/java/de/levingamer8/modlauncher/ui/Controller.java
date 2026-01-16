@@ -35,6 +35,11 @@ import javafx.util.Duration;
 import javafx.util.StringConverter;
 
 import javafx.geometry.Insets;
+import javafx.fxml.FXML;
+import javafx.scene.control.SplitPane;
+import javafx.scene.control.TitledPane;
+import javafx.application.Platform;
+
 
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.awt.*;
@@ -55,6 +60,13 @@ public class Controller {
     @FXML private Button loginButton;
     @FXML private Button launcherUpdateButton;
     @FXML private Label versionLabel;
+    @FXML private TextArea changelogArea;
+    @FXML private Label serverStatusLabel;
+    @FXML private Label serverDetailsLabel;
+    @FXML private Label packInfoLabel;
+
+    @FXML private SplitPane mainSplit;
+    @FXML private TitledPane logPane;
 
 
 
@@ -117,18 +129,49 @@ public class Controller {
                 "ModLauncher"
         );
 
-// Auto-Check beim Start (nicht nervig: nur Hinweis, wenn Update existiert)
-        Platform.runLater(() -> launcherUpdater.checkForUpdates(false));
-
         if (versionLabel != null) {
             versionLabel.setText("v" + detectVersion());
         }
 
+        // Auto-Check beim Start (nicht wenn dev version)
+        if (!versionLabel.getText().equals("vdev")) {
+            Platform.runLater(() -> launcherUpdater.checkForUpdates(false));
+        }
+
+
+
+
         // Default-Status optisch korrekt
         setStatus("Bereit", "pillOk");
 
+        if (changelogArea != null) changelogArea.setText("- Noch kein Changelog geladen.\n");
+        if (serverStatusLabel != null) serverStatusLabel.getStyleClass().setAll("pillError");
+        if (serverDetailsLabel != null) serverDetailsLabel.setText("Noch kein Check implementiert.");
+        if (packInfoLabel != null) packInfoLabel.setText("Manifest laden -> dann hier Infos anzeigen.");
+
+
         // logArea defensiv
         if (logArea != null) logArea.setEditable(false);
+
+        if (mainSplit != null && logPane != null) {
+
+            Runnable apply = () -> {
+                if (logPane.isExpanded()) {
+                    mainSplit.setDividerPositions(0.60);   // Log sichtbar, ordentlich hoch
+                } else {
+                    mainSplit.setDividerPositions(0.97);   // Log quasi weg
+                }
+            };
+
+            // Wichtig: 2 Layout-Pässe, sonst „klebt“ der Divider
+            Platform.runLater(() -> Platform.runLater(apply));
+
+            logPane.expandedProperty().addListener((obs, oldV, expanded) ->
+                    Platform.runLater(() -> Platform.runLater(apply))
+            );
+        }
+
+
 
     }
 

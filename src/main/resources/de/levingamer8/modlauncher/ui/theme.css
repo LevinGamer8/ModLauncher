@@ -203,4 +203,186 @@
     -fx-border-radius: 999;
 }
 
+/* Tiny pill buttons for profile actions */
+.iconPill {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-text-fill: #cbd5e6;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-border-color: rgba(255,255,255,0.10);
+    -fx-padding: 6 10 6 10;
+    -fx-font-size: 11px;
+}
+.iconPill:hover { -fx-background-color: rgba(255,255,255,0.10); }
 
+.iconPillDanger {
+    -fx-background-color: rgba(255,120,120,0.10);
+    -fx-text-fill: #ffb2b2;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-border-color: rgba(255,120,120,0.22);
+    -fx-padding: 6 10 6 10;
+    -fx-font-size: 11px;
+}
+.iconPillDanger:hover { -fx-background-color: rgba(255,120,120,0.16); }
+
+/* Tabs */
+.tabs .tab-header-area .tab-header-background {
+    -fx-background-color: transparent;
+}
+.tabs .tab {
+    -fx-background-color: rgba(255,255,255,0.04);
+    -fx-background-radius: 10 10 0 0;
+    -fx-border-color: rgba(255,255,255,0.08);
+    -fx-border-radius: 10 10 0 0;
+}
+.tabs .tab:selected {
+    -fx-background-color: rgba(255,255,255,0.07);
+}
+.tabs .tab-label {
+    -fx-text-fill: #cbd5e6;
+    -fx-font-size: 12px;
+    -fx-font-weight: 700;
+}
+
+/* Make titledpane feel like a card */
+.titledCard > .title {
+    -fx-background-color: rgba(255,255,255,0.04);
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-border-color: rgba(255,255,255,0.08);
+}
+.titledCard > *.content {
+    -fx-background-color: transparent;
+}
+.mainSplit {
+    -fx-background-color: transparent;
+}
+
+.mainSplit > .split-pane-divider {
+    -fx-padding: 0 1 0 1;
+    -fx-background-color: rgba(255,255,255,0.08);
+}
+
+.mainSplit .contentRoot {
+    -fx-padding: 24;
+}
+.iconPill {
+    -fx-background-color: rgba(120, 180, 255, 0.08);
+    -fx-text-fill: #cfe2ff;
+    -fx-border-color: rgba(120, 180, 255, 0.18);
+}
+.iconPill:hover {
+    -fx-background-color: rgba(120, 180, 255, 0.12);
+    -fx-border-color: rgba(120, 180, 255, 0.26);
+}
+
+/* Colored action pills */
+.iconPillCreate {
+    -fx-background-color: rgba(49, 227, 193, 0.10);
+    -fx-text-fill: #9ff3e5;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-border-color: rgba(49, 227, 193, 0.22);
+    -fx-padding: 6 10 6 10;
+    -fx-font-size: 11px;
+}
+.iconPillCreate:hover { -fx-background-color: rgba(49, 227, 193, 0.16); }
+
+.iconPillEdit {
+    -fx-background-color: rgba(120, 180, 255, 0.10);
+    -fx-text-fill: #cfe2ff;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-border-color: rgba(120, 180, 255, 0.22);
+    -fx-padding: 6 10 6 10;
+    -fx-font-size: 11px;
+}
+.iconPillEdit:hover { -fx-background-color: rgba(120, 180, 255, 0.16); }
+
+.iconPillCopy {
+    -fx-background-color: rgba(255, 200, 120, 0.10);
+    -fx-text-fill: #ffd9a8;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-border-color: rgba(255, 200, 120, 0.22);
+    -fx-padding: 6 10 6 10;
+    -fx-font-size: 11px;
+}
+.iconPillCopy:hover { -fx-background-color: rgba(255, 200, 120, 0.16); }
+
+.iconCreate { -fx-fill: #31e3c1; }
+.iconEdit   { -fx-fill: #7db4ff; }
+.iconCopy   { -fx-fill: #ffc878; }
+.iconDelete { -fx-fill: #ff8a8a; }
+
+.iconSmall {
+    -fx-scale-x: 0.85;
+    -fx-scale-y: 0.85;
+}
+
+/* Square icon buttons */
+
+/* Make SVG icons visible */
+.iconSvg {
+    -fx-stroke-width: 2.2;
+    -fx-stroke-line-cap: ROUND;
+    -fx-stroke-line-join: ROUND;
+    -fx-fill: transparent;           /* IMPORTANT: line icons */
+}
+
+/* Color variants (stroke-based) */
+.iconCreate { -fx-stroke: #31e3c1; }
+.iconEdit   { -fx-stroke: #7db4ff; }
+.iconCopy   { -fx-stroke: #ffc878; }
+.iconDelete { -fx-stroke: #ff8a8a; }
+
+.iconBtn:hover {
+    -fx-background-color: rgba(255,255,255,0.10);
+    -fx-border-color: rgba(255,255,255,0.16);
+}
+
+.iconBtn {
+    -fx-min-width: 34px;
+    -fx-min-height: 34px;
+    -fx-pref-width: 34px;
+    -fx-pref-height: 34px;
+    -fx-max-width: 34px;
+    -fx-max-height: 34px;
+
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-padding: 0;
+    -fx-alignment: CENTER;
+
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(255,255,255,0.10);
+}
+
+.iconBtn:hover {
+    -fx-background-color: rgba(255,255,255,0.10);
+    -fx-border-color: rgba(255,255,255,0.16);
+}
+
+
+.iconHint {
+    -fx-text-fill: rgba(233,237,245,0.55);
+    -fx-font-size: 10px;
+}
+
+
+
+.iconBtn {
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 4, 0.5, 0, 1);
+    -fx-cursor: hand;
+    -fx-opacity: 0.9;
+    -fx-transition: all 0.2s ease;
+}
+
+.iconBtn:hover {
+    -fx-background-color: rgba(255,255,255,0.14);
+    -fx-border-color: rgba(255,255,255,0.24);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 6, 0.5, 0, 2);
+    -fx-scale-x: 1.1;
+    -fx-scale-y: 1.1;
+}

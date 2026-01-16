@@ -2,6 +2,9 @@
 
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+
+<?import javafx.scene.shape.SVGPath?>
+<?import javafx.scene.Group?>
 <BorderPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
             fx:controller="de.levingamer8.modlauncher.ui.Controller"
@@ -14,7 +17,7 @@
                 <Label text="ModLauncher" styleClass="h1"/>
                 <HBox spacing="8" alignment="CENTER_LEFT">
                     <Label text="made by LevinGamer8" styleClass="mutedSmall"/>
-                    <Label fx:id="versionLabel" text="0" styleClass="version"/>
+                    <Label fx:id="versionLabel" styleClass="version"/>
                 </HBox>
             </VBox>
 
@@ -29,75 +32,195 @@
 
     <!-- MAIN CONTENT -->
     <center>
-        <HBox spacing="16">
+        <!-- SplitPane: oben UI, unten Log (immer groß & resizebar) -->
+        <SplitPane fx:id="mainSplit" orientation="VERTICAL" dividerPositions="0.88" styleClass="mainSplit">
 
-            <!-- LEFT COLUMN -->
-            <VBox spacing="14" prefWidth="380">
+        <!-- TOP AREA -->
+            <items>
+                <HBox spacing="16" styleClass="contentRoot">
 
-                <VBox styleClass="card" spacing="10">
-                    <Label text="Manifest" styleClass="sectionTitle"/>
-                    <VBox spacing="6">
-                        <Label text="Manifest URL" styleClass="mutedSmall"/>
-                        <TextField fx:id="manifestUrlField" promptText="http://.../manifest.json"/>
-                    </VBox>
-                </VBox>
+                    <!-- LEFT COLUMN -->
+                    <VBox spacing="14" prefWidth="380" fillWidth="true">
 
-                <VBox styleClass="card" spacing="10">
-                    <Label text="Profil" styleClass="sectionTitle"/>
-                    <HBox spacing="8" alignment="CENTER_LEFT">
-                        <ComboBox fx:id="profileCombo" HBox.hgrow="ALWAYS"/>
-                    </HBox>
-                </VBox>
-
-                <VBox styleClass="card" spacing="10">
-                    <Label text="Account" styleClass="sectionTitle"/>
-                    <VBox spacing="6">
-                        <Label text="Name (Offline/Anzeige)" styleClass="mutedSmall"/>
-                        <TextField fx:id="playerNameField" promptText="Player"/>
-                    </VBox>
-
-                    <HBox spacing="10" alignment="CENTER_LEFT">
-                        <Button fx:id="loginButton" text="Login (Microsoft)" onAction="#onLoginClicked" styleClass="secondary actionButton"/>
-                        <Label fx:id="loginStatusLabel" text="Nicht eingeloggt" styleClass="mutedSmall" />
-                    </HBox>
-                </VBox>
-
-                <VBox styleClass="card" spacing="10">
-                    <Label text="Aktionen" styleClass="sectionTitle"/>
-
-                    <HBox spacing="10">
-                        <Button fx:id="launcherUpdateButton" text="Launcher-Update" onAction="#onLauncherUpdate" styleClass="ghost actionButton"/>
-                        <Button fx:id="openFolderButton" text="Instanz-Ordner" onAction="#onOpenFolder" styleClass="ghost actionButton"/>
-                    </HBox>
-
-                    <HBox spacing="10">
-                        <Button fx:id="updateButton" text="Update" onAction="#onUpdate" styleClass="secondary actionButton"/>
-                        <Button fx:id="playButton" text="Start" onAction="#onPlay" styleClass="primaryBig actionButton" HBox.hgrow="ALWAYS"/>
-                    </HBox>
-
-                    <!-- OPTIONAL: "Details" toggle below -->
-                    <TitledPane text="Details (Log)" expanded="false">
-                        <VBox spacing="10">
-                            <HBox spacing="10">
-                                <Button text="Kopieren" onAction="#onCopyLog" styleClass="ghost actionButton"/>
-                                <Button text="Leeren" onAction="#onClearLog" styleClass="ghostDanger actionButton"/>
-                            </HBox>
-                            <TextArea fx:id="logArea" editable="false" wrapText="false" prefRowCount="10" styleClass="logArea"/>
+                        <VBox styleClass="card" spacing="10">
+                            <Label text="Manifest" styleClass="sectionTitle"/>
+                            <VBox spacing="6">
+                                <Label text="Manifest URL" styleClass="mutedSmall"/>
+                                <TextField fx:id="manifestUrlField" promptText="http://.../manifest.json"/>
+                            </VBox>
                         </VBox>
+
+                        <VBox styleClass="card" spacing="10">
+                            <HBox alignment="CENTER_LEFT" spacing="8">
+                                <Label text="Profil" styleClass="sectionTitle"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+
+                                    <VBox alignment="CENTER" spacing="4">
+                                        <Button onAction="#onNewProfile" styleClass="iconBtn">
+                                            <graphic>
+                                                <SVGPath content="M12 5v14 M5 12h14"
+                                                         style="-fx-stroke: #31e3c1; -fx-stroke-width: 2.4; -fx-fill: transparent; -fx-stroke-line-cap: round; -fx-stroke-line-join: round;"/>
+                                            </graphic>
+                                        </Button>
+                                        <Label text="Neu" styleClass="iconHint"/>
+                                    </VBox>
+
+                                    <VBox alignment="CENTER" spacing="4">
+                                        <Button onAction="#onEditProfile" styleClass="iconBtn">
+                                            <graphic>
+                                                <SVGPath content="M5 19l3.5-1 9-9-2.5-2.5-9 9L5 19z M13 6l2.5 2.5"
+                                                         style="-fx-stroke: #7db4ff; -fx-stroke-width: 2.4; -fx-fill: transparent; -fx-stroke-line-cap: round; -fx-stroke-line-join: round;"/>
+                                            </graphic>
+                                        </Button>
+                                        <Label text="Bearbeiten" styleClass="iconHint"/>
+                                    </VBox>
+
+                                    <VBox alignment="CENTER" spacing="4">
+                                        <Button onAction="#onDuplicateProfile" styleClass="iconBtn">
+                                            <graphic>
+                                                <SVGPath content="M8 8h10v10H8z M6 16H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                                                         style="-fx-stroke: #ffc878; -fx-stroke-width: 2.4; -fx-fill: transparent; -fx-stroke-line-cap: round; -fx-stroke-line-join: round;"/>
+                                            </graphic>
+                                        </Button>
+                                        <Label text="Kopieren" styleClass="iconHint"/>
+                                    </VBox>
+
+                                    <VBox alignment="CENTER" spacing="4">
+                                        <Button onAction="#onDeleteProfile" styleClass="iconBtn">
+                                        <graphic>
+                                                <Group>
+                                                    <SVGPath content="M135.2 17.7L128 32H32C14.3 32 0 46.3 0 64S14.3 96 32 96H416c17.7 0 32-14.3 32-32s-14.3-32-32-32H320l-7.2-14.3C307.4 6.8 296.3 0 284.2 0H163.8c-12.1 0-23.2 6.8-28.6 17.7zM416 128H32L53.2 467c1.6 25.3 22.6 45 47.9 45H346.9c25.3 0 46.3-19.7 47.9-45L416 128z"
+                                                             styleClass="iconDelete"
+                                                             scaleX="0.04"
+                                                             scaleY="0.04"/>
+                                                </Group>
+                                            </graphic>
+                                        </Button>
+                                        <Label text="Löschen" styleClass="iconHint"/>
+                                    </VBox>
+                                </HBox>
+
+
+                            <ComboBox fx:id="profileCombo"/>
+                        </VBox>
+
+                        <VBox styleClass="card" spacing="10">
+                            <Label text="Account" styleClass="sectionTitle"/>
+                            <VBox spacing="6">
+                                <Label text="Name (Offline/Anzeige)" styleClass="mutedSmall"/>
+                                <TextField fx:id="playerNameField" promptText="Player"/>
+                            </VBox>
+
+                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                <Button fx:id="loginButton" text="Login (Microsoft)" onAction="#onLoginClicked"
+                                        styleClass="secondary actionButton"/>
+                                <Label fx:id="loginStatusLabel" text="Nicht eingeloggt" styleClass="mutedSmall"/>
+                            </HBox>
+                        </VBox>
+
+                        <VBox styleClass="card" spacing="10">
+                            <Label text="Launcher" styleClass="sectionTitle"/>
+                            <HBox spacing="10">
+                                <Button fx:id="launcherUpdateButton"
+                                        text="Launcher aktualisieren"
+                                        onAction="#onLauncherUpdate"
+                                        styleClass="ghost actionButton"/>
+                            </HBox>
+                        </VBox>
+
+
+                        <!-- Aktionen ohne Log -->
+                        <VBox styleClass="card" spacing="10">
+                            <Label text="Aktionen" styleClass="sectionTitle"/>
+
+                            <HBox spacing="10">
+                                <Button fx:id="openFolderButton" text="Instanz-Ordner" onAction="#onOpenFolder"
+                                        styleClass="ghost actionButton"/>
+                            </HBox>
+
+                            <HBox spacing="10">
+                                <Button fx:id="updateButton"
+                                        text="Modpack aktualisieren"
+                                        onAction="#onUpdate"
+                                        styleClass="secondary actionButton"/>
+                                <Button fx:id="playButton" text="Start" onAction="#onPlay"
+                                        styleClass="primaryBig actionButton" HBox.hgrow="ALWAYS"/>
+                            </HBox>
+                        </VBox>
+
+                    </VBox>
+
+                    <!-- RIGHT COLUMN -->
+                    <VBox spacing="14" HBox.hgrow="ALWAYS">
+
+                        <VBox styleClass="card" spacing="10" VBox.vgrow="ALWAYS">
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <Label text="Übersicht" styleClass="sectionTitle"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label text="Live" styleClass="pillOk"/>
+                            </HBox>
+
+                            <TabPane tabClosingPolicy="UNAVAILABLE" styleClass="tabs" VBox.vgrow="ALWAYS">
+                                <tabs>
+                                    <Tab text="Changelog">
+                                        <VBox spacing="10" styleClass="pad16" VBox.vgrow="ALWAYS">
+                                            <Label text="Was ist neu?" styleClass="mutedSmall"/>
+                                            <TextArea fx:id="changelogArea" editable="false" wrapText="true"
+                                                      styleClass="logArea" VBox.vgrow="ALWAYS"/>
+                                        </VBox>
+                                    </Tab>
+
+                                    <Tab text="Server">
+                                        <VBox spacing="10" styleClass="pad16" VBox.vgrow="ALWAYS">
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Label text="Status:" styleClass="mutedSmall"/>
+                                                <Label fx:id="serverStatusLabel" text="Unbekannt" styleClass="pillError"/>
+                                            </HBox>
+                                            <Label fx:id="serverDetailsLabel"
+                                                   text="Noch kein Check implementiert."
+                                                   styleClass="muted"/>
+                                        </VBox>
+                                    </Tab>
+
+                                    <Tab text="Modpack">
+                                        <VBox spacing="10" styleClass="pad16" VBox.vgrow="ALWAYS">
+                                            <Label text="Pack-Infos" styleClass="mutedSmall"/>
+                                            <Label fx:id="packInfoLabel"
+                                                   text="Manifest laden -> hier kannst du Name/Version/Loader anzeigen."
+                                                   styleClass="muted"/>
+                                        </VBox>
+                                    </Tab>
+                                </tabs>
+                            </TabPane>
+                        </VBox>
+
+                    </VBox>
+
+                </HBox>
+
+                <!-- BOTTOM AREA: LOG (collapsible) -->
+                <VBox styleClass="contentRoot">
+                    <TitledPane fx:id="logPane" text="Details (Log)" expanded="false" styleClass="titledCard">
+                        <content>
+                            <VBox styleClass="card" spacing="10">
+                                <HBox alignment="CENTER_LEFT" spacing="10">
+                                    <Region HBox.hgrow="ALWAYS"/>
+                                    <Button text="Kopieren" onAction="#onCopyLog" styleClass="ghost actionButton"/>
+                                    <Button text="Leeren" onAction="#onClearLog" styleClass="ghostDanger actionButton"/>
+                                </HBox>
+
+                                <TextArea fx:id="logArea"
+                                          editable="false"
+                                          wrapText="false"
+                                          styleClass="logArea"
+                                          VBox.vgrow="ALWAYS"/>
+                            </VBox>
+                        </content>
                     </TitledPane>
                 </VBox>
 
-            </VBox>
-
-            <!-- RIGHT COLUMN: you can keep empty, or later add "News / Patchnotes / server status" -->
-            <VBox spacing="14" HBox.hgrow="ALWAYS">
-                <VBox styleClass="card" spacing="10">
-                    <Label text="Übersicht" styleClass="sectionTitle"/>
-                    <Label text="Hier kannst du später Changelog, Server-Status oder Modpack-Infos anzeigen." styleClass="muted"/>
-                </VBox>
-            </VBox>
-
-        </HBox>
+            </items>
+        </SplitPane>
     </center>
 
 </BorderPane>
