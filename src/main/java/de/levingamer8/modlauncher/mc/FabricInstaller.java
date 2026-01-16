@@ -37,7 +37,7 @@ public final class FabricInstaller {
         if (resp.statusCode() != 200) throw new IOException("Fabric meta HTTP " + resp.statusCode() + ": " + url);
 
         JsonArray arr = JsonParser.parseString(resp.body()).getAsJsonArray();
-        if (arr.size() == 0) throw new IllegalStateException("Fabric meta: keine Loader-Versionen für " + mcVersion);
+        if (arr.isEmpty()) throw new IllegalStateException("Fabric meta: keine Loader-Versionen für " + mcVersion);
 
         // In der Praxis ist das erste Element die neueste.
         JsonObject first = arr.get(0).getAsJsonObject();
@@ -90,7 +90,7 @@ public final class FabricInstaller {
         for (var e : libsCommon) libsAll.add(e);
         for (var e : libsClient) libsAll.add(e);
 
-        if (libsAll.size() == 0) {
+        if (libsAll.isEmpty()) {
             throw new IllegalStateException("Fabric meta: libraries.common+client leer");
         }
 

@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<?import javafx.geometry.Insets?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
-
 <BorderPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
             fx:controller="de.levingamer8.modlauncher.ui.Controller"
@@ -23,25 +21,37 @@
 
     <!-- MAIN -->
     <center>
-        <SplitPane dividerPositions="0.36" styleClass="split">
-            <!-- LEFT: CONTROLS -->
-            <ScrollPane fitToWidth="true" styleClass="scroll">
-                <VBox spacing="14" styleClass="panel" prefWidth="360">
+        <StackPane styleClass="contentRoot">
+        <SplitPane dividerPositions="0.33" styleClass="split">
+            <ScrollPane fitToWidth="true" fitToHeight="true" styleClass="scroll" hbarPolicy="NEVER">
+                <VBox spacing="14" styleClass="panel" prefWidth="360" minWidth="360" maxWidth="420">
+                    <!-- Manifest -->
                     <!-- Manifest -->
                     <VBox spacing="6" styleClass="card">
                         <Label text="Manifest" styleClass="sectionTitle"/>
                         <Label text="Manifest URL" styleClass="muted"/>
+
                         <TextField fx:id="manifestUrlField"
-                                   promptText="https://deinserver.tld/pack/manifest.json"/>
+                                   promptText="https://deinserver.tld/pack/manifest.json"
+                                   maxWidth="1.7976931348623157E308"/>
 
                         <Label text="Profil" styleClass="muted"/>
-                        <HBox spacing="8">
-                            <ComboBox fx:id="profileCombo" HBox.hgrow="ALWAYS"/>
-                            <Button text="Neu" onAction="#onNewProfile" styleClass="ghost"/>
-                            <Button text="Löschen" onAction="#onDeleteProfile" styleClass="ghostDanger"/>
+
+                        <HBox spacing="8" alignment="CENTER_LEFT">
+                            <ComboBox fx:id="profileCombo"
+                                      maxWidth="1.7976931348623157E308"
+                                      HBox.hgrow="ALWAYS"/>
+                            <MenuButton text="⋯" styleClass="ghost">
+                                <items>
+                                    <MenuItem text="Profil bearbeiten" onAction="#onEditProfile"/>
+                                    <MenuItem text="Duplizieren" onAction="#onDuplicateProfile"/>
+                                    <SeparatorMenuItem/>
+                                    <MenuItem text="Neu" onAction="#onNewProfile"/>
+                                    <MenuItem text="Löschen" onAction="#onDeleteProfile"/>
+                                </items>
+                            </MenuButton>
                         </HBox>
                     </VBox>
-
                     <!-- Player + Login -->
                     <VBox spacing="10" styleClass="card">
                         <Label text="Account" styleClass="sectionTitle"/>
@@ -51,8 +61,9 @@
 
                         <!-- Optional: Login -->
                         <HBox spacing="10">
-                            <Button fx:id="loginButton" text="Login (Microsoft)" onAction="#onLoginClicked" styleClass="secondary" />
-                            <Label fx:id="loginStatusLabel" text="Nicht eingeloggt" styleClass="muted" />
+                            <Button fx:id="loginButton" text="Login (Microsoft)" onAction="#onLoginClicked"
+                                    styleClass="secondary"/>
+                            <Label fx:id="loginStatusLabel" text="Nicht eingeloggt" styleClass="muted"/>
                         </HBox>
                     </VBox>
 
@@ -61,8 +72,10 @@
                         <Label text="Aktionen" styleClass="sectionTitle"/>
 
                         <HBox spacing="10">
-                            <Button fx:id="updateButton" text="Update / Installieren" onAction="#onUpdate" styleClass="primary" HBox.hgrow="ALWAYS"/>
-                            <Button fx:id="openFolderButton" text="Instanzordner öffnen" onAction="#onOpenFolder" styleClass="secondary"/>
+                            <Button fx:id="updateButton" text="Update / Installieren" onAction="#onUpdate"
+                                    styleClass="primary" HBox.hgrow="ALWAYS"/>
+                            <Button fx:id="openFolderButton" text="Instanzordner öffnen" onAction="#onOpenFolder"
+                                    styleClass="secondary"/>
                         </HBox>
 
                         <Button fx:id="playButton" text="Start" onAction="#onPlay" styleClass="primaryBig"/>
@@ -75,7 +88,7 @@
             </ScrollPane>
 
             <!-- RIGHT: LOG -->
-            <VBox styleClass="logWrap" spacing="10">
+            <VBox styleClass="logWrap" spacing="10" fillWidth="true">
                 <HBox spacing="10" styleClass="logHeader">
                     <Label text="Log" styleClass="sectionTitle"/>
                     <Region HBox.hgrow="ALWAYS"/>
@@ -83,9 +96,15 @@
                     <Button text="Leeren" onAction="#onClearLog" styleClass="ghost"/>
                 </HBox>
 
-                <TextArea fx:id="logArea" editable="false" wrapText="false" styleClass="logArea"/>
+                <TextArea fx:id="logArea"
+                          editable="false"
+                          wrapText="false"
+                          styleClass="logArea"
+                          VBox.vgrow="ALWAYS"/>
             </VBox>
+
         </SplitPane>
+        </StackPane>
     </center>
 
 </BorderPane>

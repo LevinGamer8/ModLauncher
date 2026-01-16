@@ -77,6 +77,12 @@ public final class JavaRuntimeManager {
             throw new LaunchException("Java installiert, aber java.exe nicht gefunden in: " + extractDir);
         }
 
+        try {
+            Files.delete(zip);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
         if (log != null) log.accept("[JAVA] Install ok: " + javaExe);
         return javaExe;
     }

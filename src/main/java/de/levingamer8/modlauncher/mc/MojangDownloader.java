@@ -54,16 +54,37 @@ public final class MojangDownloader {
         Path vJsonPath = ensureVersionJson(sharedRoot, versionId);
         JsonObject vJson = JsonParser.parseString(Files.readString(vJsonPath)).getAsJsonObject();
 
-        JsonObject downloads = vJson.getAsJsonObject("downloads");
+        JsonObject downloads = vJson.has("downloads") ? vJson.getAsJsonObject("downloads") : null;
         if (downloads == null || !downloads.has("client")) {
-            throw new IllegalStateException("downloads.client fehlt in " + versionId);
-        }
-        String url = downloads.getAsJsonObject("client").get("url").getAsString();
+            // Wrapper-Version (Forge/Fabric) -> auf Vanilla weiterleiten
+            String base = null;
 
+            if (vJson.has("jar")) base = vJson.get("jar").getAsString();
+            if ((base == null || base.isBlank()) && vJson.has("inheritsFrom")) base = vJson.get("inheritsFrom").getAsString();
+
+            if (base == null || base.isBlank()) {
+                // letzte Rettung: aus id ableiten
+                String id = vJson.has("id") ? vJson.get("id").getAsString() : versionId;
+
+                int forgeIdx = id.indexOf("-forge-");
+                if (forgeIdx > 0) base = id.substring(0, forgeIdx);
+
+                int fabricIdx = id.indexOf("fabric-loader-");
+                if (base == null && fabricIdx == 0 && vJson.has("inheritsFrom")) base = vJson.get("inheritsFrom").getAsString();
+            }
+
+            if (base == null || base.isBlank()) {
+                throw new IllegalStateException("downloads.client fehlt in " + versionId + " und keine jar/inheritsFrom ableitbar.");
+            }
+            return ensureClientJar(sharedRoot, base);
+        }
+
+        String url = downloads.getAsJsonObject("client").get("url").getAsString();
         Files.createDirectories(vDir);
         downloadTo(url, vJar);
         return vJar;
     }
+
 
     private JsonObject getJson(String url) throws Exception {
         HttpRequest req = HttpRequest.newBuilder(URI.create(url))

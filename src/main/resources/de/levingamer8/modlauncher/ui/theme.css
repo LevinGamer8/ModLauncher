@@ -135,3 +135,8 @@
     -fx-border-radius: 12;
 }
 
+.contentRoot {
+    -fx-padding: 24;
+}
+
+

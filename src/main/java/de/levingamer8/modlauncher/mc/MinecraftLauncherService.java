@@ -4,6 +4,8 @@ import com.google.gson.JsonObject;
 import de.levingamer8.modlauncher.core.LoaderType;
 import de.levingamer8.modlauncher.runtime.JavaRuntimeManager;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.nio.file.*;
 import java.util.*;
 import java.util.function.Consumer;
@@ -13,253 +15,275 @@ public final class MinecraftLauncherService {
     public record AuthSession(String playerName, String uuid, String accessToken, String userType) {}
     public record LaunchSpec(String mcVersion, LoaderType loaderType, String loaderVersion, int memoryMb) {}
 
+    private static final String LAUNCHER_NAME = "ModLauncher";
+    private static final String LAUNCHER_VERSION = "1.0";
+
     private final MojangDownloader mojang = new MojangDownloader();
     private final MinecraftInstaller vanillaInstaller = new MinecraftInstaller(); // FlowUpdater wrapper
     private final FabricInstaller fabricInstaller = new FabricInstaller();
-    private final ForgeInstaller1122Plus forgeInstaller = new ForgeInstaller1122Plus();
+
+    // Forge
+    private final ModernForgeInstaller modernForge = new ModernForgeInstaller();
+    private final ForgeInstaller1122Plus legacyForge = new ForgeInstaller1122Plus();
+
     private final MojangVersionResolver resolver = new MojangVersionResolver();
     private final LibraryService libraryService = new LibraryService();
-    private final ArgsBuilder argsBuilder = new ArgsBuilder();
 
-    public Process launch(
-            Path sharedRoot,
-            Path instanceGameDir,
-            Path instanceRuntimeDir,
-            LaunchSpec spec,
-            AuthSession auth,
-            Consumer<String> log
-    ) throws Exception {
+    public void launch(Path sharedRoot,
+                       Path instanceGameDir,
+                       Path instanceRuntimeDir,
+                       LaunchSpec spec,
+                       AuthSession auth,
+                       Consumer<String> log) throws Exception {
 
+        final Consumer<String> L = safeLog(log);
+
+        // --- dirs ---
         Files.createDirectories(sharedRoot);
         Files.createDirectories(instanceGameDir);
         Files.createDirectories(instanceRuntimeDir);
 
-        // 1) Vanilla assets/libs via FlowUpdater
-        vanillaInstaller.ensureVanillaInstalled(sharedRoot, spec.mcVersion(), safeLog(log));
+        // natives dir (wichtig, wird in JSON über ${natives_directory} genutzt)
+        Path nativesDir = instanceRuntimeDir.resolve("natives");
+        Files.createDirectories(nativesDir);
 
-        // 2) Mojang version json + client jar garantieren
+        // --- 1) Vanilla Basis (Assets/Index/Client/Libraries via FlowUpdater) ---
+        vanillaInstaller.ensureVanillaInstalled(sharedRoot, spec.mcVersion(), L);
+
+        // optional: Root-Müll bereinigen (best-effort)
+        cleanupSharedRootArtifacts(sharedRoot, L);
+
+        // --- 2) Version JSON + Client Jar garantieren (Vanilla) ---
         mojang.ensureVersionJson(sharedRoot, spec.mcVersion());
         mojang.ensureClientJar(sharedRoot, spec.mcVersion());
 
-        // 3) Loader versionId bestimmen
+        // --- 3) Loader vorbereiten -> versionId bestimmen ---
         String versionId;
-        String effectiveLoaderVersion = spec.loaderVersion(); // nur für Logging/Forge
-
         if (spec.loaderType() == LoaderType.VANILLA) {
             versionId = spec.mcVersion();
+
         } else if (spec.loaderType() == LoaderType.FABRIC) {
-            // >>> Production-Mode: immer latest Fabric Loader passend zur MC-Version <<<
             FabricInstaller.LatestFabric latest = fabricInstaller.fetchLatestLoaderForMc(spec.mcVersion());
-            effectiveLoaderVersion = latest.loaderVersion();
-            if (log != null) log.accept("[FABRIC] Verwende latest loader für " + spec.mcVersion() + ": " + effectiveLoaderVersion);
+            String loaderVer = latest.loaderVersion();
+            L.accept("[FABRIC] Verwende latest Fabric Loader für " + spec.mcVersion() + ": " + loaderVer);
 
-            versionId = fabricInstaller.ensureFabricVersion(sharedRoot, spec.mcVersion(), effectiveLoaderVersion);
+            versionId = fabricInstaller.ensureFabricVersion(sharedRoot, spec.mcVersion(), loaderVer);
 
-            // Fabric API auto installieren (mit effektivem Loader)
-            FabricApiAutoInstaller fai = new FabricApiAutoInstaller();
-            FabricApiAutoInstaller.Result r = fai.ensureFabricApiInstalled(instanceGameDir, spec.mcVersion(), effectiveLoaderVersion, log);
-
-            // Falls r.jarPath == null -> heißt: selbst mit latest Loader geht’s nicht (sollte praktisch nie passieren)
-            if (r.jarPath() == null && r.requiredLoaderMinOrNull() != null) {
-                throw new IllegalStateException("Fabric API benötigt Loader >= " + r.requiredLoaderMinOrNull()
-                        + ", aber latest Loader ist " + effectiveLoaderVersion + " (unplausibel).");
-            }
         } else if (spec.loaderType() == LoaderType.FORGE) {
-            // Forge bleibt wie gehabt (bis Processor-Installer drin ist)
-            versionId = forgeInstaller.ensureForgeVersion(sharedRoot, spec.mcVersion(), spec.loaderVersion());
+            String mc = spec.mcVersion();
+            String forgeVer = spec.loaderVersion();
+            if (forgeVer == null || forgeVer.isBlank()) {
+                throw new IllegalStateException("Forge loaderVersion fehlt im Manifest/LaunchSpec (z.B. 47.4.10).");
+            }
+
+            if (isAtLeast13(mc)) {
+                // Modern Forge (1.13+)
+                versionId = modernForge.installForge(sharedRoot, mc, forgeVer, L);
+            } else {
+                // Legacy Forge (z.B. 1.12.2)
+                Path installerJar = downloadForgeInstallerJar(sharedRoot, mc, forgeVer, L);
+                versionId = legacyForge.installForgeClient(sharedRoot, mc, forgeVer, installerJar, L);
+            }
+
         } else {
             throw new IllegalStateException("Unbekannter LoaderType: " + spec.loaderType());
         }
 
-        // 4) merged version json
+        // --- 4) merged version json (inheritsFrom auflösen) ---
         JsonObject v = resolver.resolveMergedVersionJson(sharedRoot, versionId);
 
-        // 5) classpath sicherstellen
-        List<Path> cp = libraryService.ensureClasspath(sharedRoot, v);
+        // --- 5) Classpath sicherstellen (Libraries + ggf. Version-Jar) ---
+        List<Path> cp = new ArrayList<>(libraryService.ensureClasspath(sharedRoot, v));
+        ensureVersionJarOnClasspath(cp, sharedRoot, versionId);
 
-        // 6) natives extrahieren (pro instanz)
-        String fp = Integer.toHexString(Objects.hash(versionId, "windows-x64"));
-        Path nativesDir = instanceRuntimeDir.resolve("natives").resolve(fp);
-        if (Files.exists(nativesDir)) deleteRecursive(nativesDir);
-        Files.createDirectories(nativesDir);
-
-        libraryService.extractNativesX64(nativesDir, sharedRoot, v);
-
-        // 7) assets index
-        String assetsIndex = v.has("assetIndex") && v.getAsJsonObject("assetIndex").has("id")
-                ? v.getAsJsonObject("assetIndex").get("id").getAsString()
-                : (v.has("assets") ? v.get("assets").getAsString() : "legacy");
-
-        // 8) vars
+        // --- 6) Vars für ${...} Platzhalter aus JSON ---
         Map<String, String> vars = new HashMap<>();
+
+        // Standard Launcher vars (wichtig!)
+        vars.put("natives_directory", nativesDir.toAbsolutePath().toString());
+        vars.put("library_directory", sharedRoot.resolve("libraries").toAbsolutePath().toString());
+        vars.put("classpath_separator", System.getProperty("path.separator"));
+        vars.put("classpath", ArgsBuilder.joinClasspath(cp));
+
+        // Mojang / Game vars
         vars.put("auth_player_name", auth.playerName());
         vars.put("auth_uuid", auth.uuid());
         vars.put("auth_access_token", auth.accessToken());
         vars.put("user_type", auth.userType());
 
-        vars.put("version_name", v.get("id").getAsString());
-        vars.put("version_type", v.has("type") ? v.get("type").getAsString() : "release");
+        vars.put("version_name", versionId);
+        vars.put("version_type", spec.loaderType().name().toLowerCase(Locale.ROOT));
 
-        vars.put("game_directory", instanceGameDir.toString());
-        vars.put("assets_root", sharedRoot.resolve("assets").toString());
-        vars.put("assets_index_name", assetsIndex);
-        vars.put("classpath", ArgsBuilder.joinClasspath(cp));
-        vars.put("natives_directory", nativesDir.toString());
+        vars.put("game_directory", instanceGameDir.toAbsolutePath().toString());
+        vars.put("assets_root", sharedRoot.resolve("assets").toAbsolutePath().toString());
+        vars.put("assets_index_name", spec.mcVersion());
 
-        vars.put("launcher_name", "ModLauncher");
-        vars.put("launcher_version", "1");
+        // Launcher identity (kommt in manchen JSONs vor)
+        vars.put("launcher_name", LAUNCHER_NAME);
+        vars.put("launcher_version", LAUNCHER_VERSION);
 
-        // defaults, damit weniger rausfliegt
-        vars.put("resolution_width", "854");
-        vars.put("resolution_height", "480");
-        vars.put("clientid", "");
-        vars.put("auth_xuid", "");
-        vars.put("quickPlayPath", "");
-        vars.put("quickPlaySingleplayer", "");
-        vars.put("quickPlayMultiplayer", "");
-        vars.put("quickPlayRealms", "");
+        // --- 7) Args aus JSON bauen (sauber, ohne nachträgliches Gepfusche) ---
+        ArgsBuilder argsBuilder = new ArgsBuilder();
 
-        // 9) args
-        List<String> jvmArgs = new ArrayList<>();
-        jvmArgs.add("-Xmx" + spec.memoryMb() + "M");
-        jvmArgs.add("-Xms" + Math.min(512, spec.memoryMb()) + "M");
-        jvmArgs.add("-Djava.library.path=" + nativesDir);
-        jvmArgs.addAll(argsBuilder.buildJvmArgs(v, vars));
-        jvmArgs = sanitizeJvmArgs(jvmArgs);
+        List<String> jvmArgs = sanitizeUnresolvedArgs(argsBuilder.buildJvmArgs(v, vars));
+        List<String> gameArgs = sanitizeUnresolvedArgs(argsBuilder.buildGameArgs(v, vars));
 
-        List<String> gameArgs = argsBuilder.buildGameArgs(v, vars);
-        gameArgs = sanitizeUnresolvedArgs(gameArgs);
+        // Memory: falls JSON nichts setzt, setzen wir es hier (ohne Forge/Fabric kaputt zu machen)
+        jvmArgs = ensureMemoryArgs(jvmArgs, spec.memoryMb());
 
-        // 10) main + java
+        // --- 8) MainClass + Java ---
         String mainClass = v.get("mainClass").getAsString();
-        Path javaExe = JavaRuntimeManager.ensureJava(spec.mcVersion(), safeLog(log));
+        Path javaExe = JavaRuntimeManager.ensureJava(spec.mcVersion(), L);
 
-        // 11) cmd
+        // --- 9) Cmd (WICHTIG: JVM-Args VOR mainClass, keine extra -cp Hacks!) ---
         List<String> cmd = new ArrayList<>();
         cmd.add(javaExe.toString());
         cmd.addAll(jvmArgs);
-        cmd.add("-cp");
-        cmd.add(ArgsBuilder.joinClasspath(cp));
         cmd.add(mainClass);
         cmd.addAll(gameArgs);
 
-        if (log != null) log.accept("[LAUNCH] " + String.join(" ", cmd));
+        L.accept("[LAUNCH] " + String.join(" ", cmd));
 
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.directory(instanceGameDir.toFile());
         pb.redirectErrorStream(true);
+
         Process p = pb.start();
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+            String line;
+            while ((line = r.readLine()) != null) {
+                L.accept("[MC] " + line);
+            }
+        }
 
-        // stdout -> log
-        new Thread(() -> {
-            try (var r = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()))) {
-                String line;
-                while ((line = r.readLine()) != null) {
-                    if (log != null) log.accept("[MC] " + line);
-                }
-            } catch (Exception ignored) {}
-        }, "mc-stdout").start();
-
-        return p;
+        int exit = p.waitFor();
+        if (exit != 0) {
+            throw new RuntimeException("Minecraft exited with code " + exit);
+        }
     }
+
+    // ---------------- helpers ----------------
 
     private static Consumer<String> safeLog(Consumer<String> log) {
-        return log != null ? log : (s) -> {};
+        return log != null ? log : (s -> {});
     }
 
-    private static List<String> sanitizeJvmArgs(List<String> in) {
-        List<String> out = new ArrayList<>();
-        for (int i = 0; i < in.size(); i++) {
-            String a = in.get(i);
-
-            // -cp setzen wir selbst
-            if ("-cp".equals(a) || "-classpath".equals(a)) {
-                i++;
-                continue;
-            }
-            // java.library.path setzen wir selbst
-            if (a.startsWith("-Djava.library.path=")) continue;
-
+    /**
+     * Entfernt nur wirklich unresolved Tokens, die NICHT ersetzt wurden.
+     * Wenn ArgsBuilder korrekt ersetzt, bleibt hier praktisch alles drin.
+     */
+    private static List<String> sanitizeUnresolvedArgs(List<String> args) {
+        List<String> out = new ArrayList<>(args.size());
+        for (String a : args) {
+            if (a == null) continue;
+            if (a.contains("${")) continue; // Platzhalter nicht aufgelöst -> raus
             out.add(a);
         }
         return out;
     }
 
-    private static List<String> sanitizeUnresolvedArgs(List<String> args) {
-        // 1) Entferne unresolved ${...}
-        List<String> out = new ArrayList<>();
-        for (int i = 0; i < args.size(); i++) {
-            String a = args.get(i);
+    private static List<String> ensureMemoryArgs(List<String> jvmArgs, int memoryMb) {
+        if (memoryMb <= 0) return jvmArgs;
 
-            if (a.contains("${")) continue;
-
-            out.add(a);
+        boolean hasXmx = false;
+        for (String a : jvmArgs) {
+            if (a != null && a.startsWith("-Xmx")) { hasXmx = true; break; }
         }
+        if (hasXmx) return jvmArgs;
 
-        // 2) Entferne Flags, deren Value leer/fehlt ist
-        List<String> cleaned = new ArrayList<>();
-        Set<String> quickPlayFlags = Set.of(
-                "--quickPlayPath",
-                "--quickPlaySingleplayer",
-                "--quickPlayMultiplayer",
-                "--quickPlayRealms"
-        );
-
-        String chosenQuickPlayFlag = null;
-
-        for (int i = 0; i < out.size(); i++) {
-            String a = out.get(i);
-
-            // QuickPlay: nur eine Option zulassen
-            if (quickPlayFlags.contains(a)) {
-                String v = (i + 1 < out.size()) ? out.get(i + 1) : null;
-
-                // wenn value fehlt/leer -> komplett raus (Flag + ggf. value)
-                if (v == null || v.isBlank() || v.startsWith("--")) {
-                    continue;
-                }
-
-                // wenn schon eine QuickPlay-Option gewählt -> diese komplett skippen
-                if (chosenQuickPlayFlag != null) {
-                    i++; // auch value skippen
-                    continue;
-                }
-
-                // erste gültige QuickPlay-Option behalten
-                chosenQuickPlayFlag = a;
-                cleaned.add(a);
-                cleaned.add(v);
-                i++; // value consumed
-                continue;
-            }
-
-            // generisches: wenn Flag kommt und value fehlt/leer -> Flag skippen
-            if (a.startsWith("--")) {
-                if (i + 1 < out.size()) {
-                    String v = out.get(i + 1);
-                    if (v.isBlank()) {
-                        i++; // value skippen
-                        continue;
-                    }
-                    // Spezialfall: nächstes ist wieder ein Flag -> value fehlt
-                    if (v.startsWith("--")) {
-                        continue;
-                    }
-                }
-            }
-
-            cleaned.add(a);
-        }
-
-        return cleaned;
+        List<String> out = new ArrayList<>(jvmArgs.size() + 1);
+        out.addAll(jvmArgs);
+        out.add("-Xmx" + memoryMb + "M");
+        return out;
     }
 
+    private static void ensureVersionJarOnClasspath(List<Path> cp, Path sharedRoot, String versionId) throws Exception {
+        Path jar = sharedRoot.resolve("versions").resolve(versionId).resolve(versionId + ".jar");
+        if (!Files.exists(jar)) {
+            // falls es ein inherited/proxy versionId ist, kann das Jar auch beim base mcVersion liegen
+            // aber normalerweise sollte es existieren, sonst stimmt der Install/FlowUpdater nicht.
+            throw new IllegalStateException("Version-Jar fehlt: " + jar);
+        }
+        for (Path p : cp) {
+            if (p.toAbsolutePath().normalize().equals(jar.toAbsolutePath().normalize())) return;
+        }
+        cp.add(jar);
+    }
 
-    private static void deleteRecursive(Path dir) throws Exception {
-        try (var s = Files.walk(dir)) {
-            s.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try { Files.deleteIfExists(p); } catch (Exception ignored) {}
+    private static Path downloadForgeInstallerJar(Path sharedRoot, String mcVersion, String forgeVersion, Consumer<String> log) throws Exception {
+        Path dir = sharedRoot.resolve("installers").resolve("forge").resolve(mcVersion + "-" + forgeVersion);
+        Files.createDirectories(dir);
+
+        String file = "forge-" + mcVersion + "-" + forgeVersion + "-installer.jar";
+        Path out = dir.resolve(file);
+
+        if (Files.exists(out) && Files.size(out) > 100_000) {
+            log.accept("[FORGE] Installer vorhanden: " + out);
+            return out;
+        }
+
+        String url = "https://maven.minecraftforge.net/net/minecraftforge/forge/"
+                + mcVersion + "-" + forgeVersion + "/"
+                + file;
+
+        log.accept("[FORGE] Download Installer: " + url);
+
+        var client = java.net.http.HttpClient.newBuilder()
+                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
+                .build();
+
+        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).GET().build();
+        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+
+        if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+            throw new RuntimeException("Forge installer download failed HTTP " + resp.statusCode() + ": " + url);
+        }
+
+        Files.write(out, resp.body(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        return out;
+    }
+
+    private static void cleanupSharedRootArtifacts(Path sharedRoot, Consumer<String> log) {
+        try (var s = Files.list(sharedRoot)) {
+            s.filter(Files::isRegularFile).forEach(p -> {
+                String name = p.getFileName().toString();
+
+                if (name.equalsIgnoreCase("client.jar")) {
+                    try {
+                        Files.deleteIfExists(p);
+                        log.accept("[CLEANUP] gelöscht: " + p);
+                    } catch (Exception ignored) {}
+                    return;
+                }
+
+                // sharedRoot/1.20.1.json -> versions/1.20.1/1.20.1.json
+                if (name.endsWith(".json") && name.matches("[0-9]+\\.[0-9]+(\\.[0-9]+)?\\.json")) {
+                    String ver = name.substring(0, name.length() - 5);
+                    Path dst = sharedRoot.resolve("versions").resolve(ver).resolve(ver + ".json");
+                    try {
+                        Files.createDirectories(dst.getParent());
+                        if (!Files.exists(dst)) {
+                            Files.move(p, dst, StandardCopyOption.REPLACE_EXISTING);
+                            log.accept("[CLEANUP] moved " + p + " -> " + dst);
+                        } else {
+                            Files.deleteIfExists(p);
+                            log.accept("[CLEANUP] deleted duplicate " + p);
+                        }
+                    } catch (Exception ignored) {}
+                }
             });
+        } catch (Exception ignored) {}
+    }
+
+    private static boolean isAtLeast13(String mcVersion) {
+        try {
+            String[] p = mcVersion.split("\\.");
+            if (p.length < 2) return false;
+            int major = Integer.parseInt(p[0]);
+            int minor = Integer.parseInt(p[1]);
+            return major > 1 || (major == 1 && minor >= 13);
+        } catch (Exception e) {
+            return false;
         }
     }
 }

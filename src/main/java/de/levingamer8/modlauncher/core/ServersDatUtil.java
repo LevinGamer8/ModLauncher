@@ -63,7 +63,7 @@ public class ServersDatUtil {
 
         if (pinToTop) {
             list.remove(entry);
-            list.add(0, entry);
+            list.addFirst(entry);
         }
 
         // rebuild servers list

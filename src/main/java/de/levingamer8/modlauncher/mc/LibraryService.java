@@ -25,23 +25,35 @@ public final class LibraryService {
 
         String id = versionJson.get("id").getAsString();
 
-        // Für Wrapper-Versionen: "jar" MUSS existieren.
-        // Wenn nicht, fallback auf inheritsFrom (bei Fabric/Forge ist das vanilla).
-        String jarId =
-                versionJson.has("jar") ? versionJson.get("jar").getAsString()
-                        : versionJson.has("inheritsFrom") ? versionJson.get("inheritsFrom").getAsString()
-                        : id;
+// Basis-Version bestimmen (Vanilla), niemals Wrapper
+        String baseId = null;
 
-        // Wenn jarId noch immer wrapper ist -> Hard Stop statt Quatschdownload
-        if (jarId.startsWith("fabric-loader-") || jarId.startsWith("forge-")) {
-            throw new IllegalStateException("Wrapper-Version ohne gültiges jar/inheritsFrom: id=" + id + " jarId=" + jarId);
+        if (versionJson.has("inheritsFrom")) baseId = versionJson.get("inheritsFrom").getAsString();
+        if ((baseId == null || baseId.isBlank()) && versionJson.has("jar")) baseId = versionJson.get("jar").getAsString();
+
+        if (baseId == null || baseId.isBlank()) {
+            // Fallback: aus "1.20.1-forge-47.4.10" -> "1.20.1"
+            int idx = id.indexOf("-forge-");
+            if (idx > 0) baseId = id.substring(0, idx);
+
+            // Fabric: "fabric-loader-0.xx-1.20.1" -> base aus inheritsFrom kommt normalerweise,
+            // aber falls nicht: letzte "-" getrennte Komponente
+            if (baseId == null && id.startsWith("fabric-loader-")) {
+                int lastDash = id.lastIndexOf('-');
+                if (lastDash > 0 && lastDash + 1 < id.length()) baseId = id.substring(lastDash + 1);
+            }
         }
 
-        mojang.ensureClientJar(sharedRoot, jarId);
+        if (baseId == null || baseId.isBlank()) {
+            throw new IllegalStateException("Kann baseId nicht bestimmen für: " + id + " (kein inheritsFrom/jar und keine ableitbare base)");
+        }
 
+// Sicherstellen, dass Vanilla-JAR existiert
+        mojang.ensureClientJar(sharedRoot, baseId);
 
-        Path vJar = sharedRoot.resolve("versions").resolve(jarId).resolve(jarId + ".jar");
-        if (!Files.exists(vJar)) throw new IllegalStateException("Version JAR fehlt: " + vJar);
+        Path vJar = sharedRoot.resolve("versions").resolve(baseId).resolve(baseId + ".jar");
+        if (!Files.exists(vJar)) throw new IllegalStateException("Vanilla Version JAR fehlt: " + vJar);
+
 
         // libraries (artifact only)
         JsonArray libs = versionJson.getAsJsonArray("libraries");
@@ -51,8 +63,25 @@ public final class LibraryService {
                 if (!allowedOnWindows(lib)) continue;
                 if (!lib.has("name")) continue;
 
-                String baseUrl = lib.has("url") ? lib.get("url").getAsString() : "https://libraries.minecraft.net/";
+                String baseUrl = lib.has("url") ? lib.get("url").getAsString() : null;
+
+                if (baseUrl == null || baseUrl.isBlank()) {
+                    String name = lib.has("name") ? lib.get("name").getAsString() : "";
+                    String group = name.contains(":") ? name.substring(0, name.indexOf(':')) : "";
+
+                    // Heuristik: Forge-Ökosystem + MCP + net.minecraft (srg/extra) -> Forge Maven
+                    if (group.startsWith("net.minecraftforge")
+                            || group.startsWith("cpw.mods")
+                            || group.startsWith("de.oceanlabs.mcp")
+                            || group.startsWith("net.minecraft")) {
+                        baseUrl = "https://maven.minecraftforge.net/";
+                    } else {
+                        baseUrl = "https://libraries.minecraft.net/";
+                    }
+                }
+
                 if (!baseUrl.endsWith("/")) baseUrl += "/";
+
 
 
                 // Artifact

@@ -71,7 +71,7 @@ public final class FabricApiAutoInstaller {
 
         if (bestCompatible == null) {
             // Keine kompatible gefunden -> nimm neueste und sag welche loaderMin gebraucht wird
-            ModrinthVersion newest = candidates.get(0);
+            ModrinthVersion newest = candidates.getFirst();
             Path tmpJar = downloadToTemp(newest);
             String reqMin;
             try {
@@ -133,7 +133,7 @@ public final class FabricApiAutoInstaller {
                         break;
                     }
                 }
-                if (fileUrl == null && files.size() > 0) {
+                if (fileUrl == null && !files.isEmpty()) {
                     JsonObject f0 = files.get(0).getAsJsonObject();
                     fileUrl = optStr(f0, "url");
                     fileName = optStr(f0, "filename");
