@@ -1,347 +1,244 @@
-.root {
-    -fx-background-color: #0f1115;
-    -fx-font-family: "Segoe UI";
-}
 
-.header {
-    -fx-padding: 16 18 10 18;
-    -fx-background-color: transparent;
-}
+       /*
+         NexoMaker-inspiriert: dunkles Gradient-Mesh + Glas-Karten + Neon-Akzent
+         Hinweis: JavaFX kann kein echtes CSS-Backdrop-Blur. Wir faken Glas über
+         - halbtransparente Flächen
+         - feine Borders
+         - weiche Shadows
+       */
 
+       /* ===== Theme Tokens ===== */
+   .root {
+       /* Baseline */
+       -fx-font-family: "Segoe UI";
+
+       /* Colors */
+       -bg0: #0b0f14;      /* neutral schwarz/grau */
+       -bg1: #0a0d12;
+
+       -card: rgba(255,255,255,0.045);
+       -card2: rgba(255,255,255,0.060);
+
+       -stroke: rgba(255,255,255,0.10);
+       -stroke2: rgba(255,255,255,0.16);
+
+       -text: #eef7ff;
+       -muted: rgba(238,247,255,0.72);
+       -muted2: rgba(238,247,255,0.52);
+
+       /* Nexo-like accents: violet -> cyan */
+       -acc:  #00ffff;     /* Hauptcyan */
+       -acc2: #22e6ff;     /* leicht dunkler */
+       -accHi: #4fffff;    /* Hover/Glow */
+       -ok:   #00ffff;
+       -busy: #31e3c1;
+       -danger: #ff4d4d;
+       -warn: #ffc878;
+
+       /* Gradient-mesh background (multiple layers) */
+       -fx-background-color:
+               radial-gradient(center 72% 18%, radius 65%, rgba(0,255,255,0.16), transparent 62%),
+               radial-gradient(center 18% 70%, radius 75%, rgba(0,255,255,0.08), transparent 64%),
+               linear-gradient(to bottom, -bg0, -bg1);
+   }
+
+/* ===== Typography ===== */
 .h1 {
     -fx-font-size: 20px;
-    -fx-font-weight: 700;
-    -fx-text-fill: #e9edf5;
+    -fx-font-weight: 900;
+    -fx-text-fill: -text;
 }
-
-.muted {
-    -fx-text-fill: #a9b3c5;
-}
-
-.mutedSmall {
-    -fx-text-fill: #7f8aa1;
-    -fx-font-size: 11px;
-}
-
-.pill {
-    -fx-background-color: rgba(120, 180, 255, 0.12);
-    -fx-text-fill: #bcd7ff;
-    -fx-padding: 6 10 6 10;
-    -fx-background-radius: 999;
-    -fx-border-radius: 999;
-    -fx-border-color: rgba(120, 180, 255, 0.25);
-}
-
-.split {
-    -fx-background-color: transparent;
-}
-
-.scroll {
-    -fx-background: transparent;
-    -fx-background-color: transparent;
-}
-
-.panel {
-    -fx-padding: 16;
-}
-
-.card {
-    -fx-background-color: rgba(255,255,255,0.035);
-    -fx-background-radius: 12;
-    -fx-padding: 14;
-    -fx-border-color: rgba(255,255,255,0.08);
-    -fx-border-radius: 12;
-}
-
-
 .sectionTitle {
-    -fx-text-fill: #e9edf5;
-    -fx-font-weight: 700;
+    -fx-text-fill: -text;
+    -fx-font-weight: 800;
     -fx-font-size: 13px;
 }
+.muted { -fx-text-fill: -muted; }
+.mutedSmall { -fx-text-fill: -muted2; -fx-font-size: 11px; }
+.version { -fx-text-fill: rgba(238,242,255,0.55); -fx-font-size: 11px; }
 
+/* ===== Layout ===== */
+.topbar { -fx-padding: 16 18 12 18; }
+.contentRoot { -fx-padding: 22; }
+.pad16 { -fx-padding: 16; }
+.hGap10 { -fx-spacing: 10; }
+.vGap10 { -fx-spacing: 10; }
+
+/* ===== Cards (Glass) ===== */
+.card {
+    -fx-background-color:
+            linear-gradient(to bottom, rgba(255,255,255,0.060), rgba(255,255,255,0.035));
+    -fx-background-radius: 16;
+    -fx-padding: 14;
+
+    -fx-border-color: rgba(255,255,255,0.12);
+    -fx-border-radius: 16;
+
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.28), 18, 0.35, 0, 8);
+}
+
+       /* ===== Global cyan hover for ALL buttons ===== */
+       .button:hover{
+           -fx-border-color: rgba(0,255,255,0.55);
+           -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.18), 16, 0.30, 0, 0);
+       }
+
+       /* Neutral buttons become slightly cyan-tinted on hover */
+       .secondary:hover,
+       .ghost:hover{
+           -fx-background-color: rgba(0,255,255,0.10);
+           -fx-border-color: rgba(0,255,255,0.35);
+       }
+
+       /* Danger stays danger (nicht cyan überschreiben) */
+       .ghostDanger:hover{
+           -fx-background-color: rgba(255,120,120,0.18);
+           -fx-border-color: rgba(255,120,120,0.32);
+           -fx-effect: dropshadow(gaussian, rgba(255,120,120,0.14), 16, 0.30, 0, 0);
+       }
+
+
+/* ===== Focus colors ===== */
 .text-field, .combo-box, .button, .progress-bar, .text-area {
-    -fx-focus-color: rgba(77, 217, 180, 0.6);
-    -fx-faint-focus-color: rgba(77, 217, 180, 0.18);
+    -fx-focus-color: rgba(139, 92, 246, 0.55);
+    -fx-faint-focus-color: rgba(139, 92, 246, 0.18);
 }
 
+/* ===== Inputs ===== */
 .text-field, .combo-box-base {
+    -fx-min-height: 40px;
     -fx-background-color: rgba(255,255,255,0.06);
-    -fx-background-radius: 10;
-    -fx-text-fill: #e9edf5;
-    -fx-prompt-text-fill: rgba(233,237,245,0.45);
-    -fx-border-color: rgba(255,255,255,0.08);
-    -fx-border-radius: 10;
+    -fx-background-radius: 12;
+
+    -fx-text-fill: -text;
+    -fx-prompt-text-fill: rgba(238,242,255,0.40);
+
+    -fx-border-color: rgba(255,255,255,0.12);
+    -fx-border-radius: 12;
+
+    -fx-padding: 10 12 10 12;
+}
+.text-field:hover, .combo-box-base:hover {
+    -fx-background-color: rgba(255,255,255,0.075);
+    -fx-border-color: rgba(255,255,255,0.18);
 }
 
-.primary {
-    -fx-background-color: #31e3c1;
-    -fx-text-fill: #07110f;
-    -fx-font-weight: 700;
-    -fx-background-radius: 12;
+.text-area {
+    -fx-background-color: rgba(0,0,0,0.28);
+    -fx-background-radius: 14;
+    -fx-text-fill: -text;
+    -fx-border-color: rgba(255,255,255,0.10);
+    -fx-border-radius: 14;
+    -fx-padding: 10 12 10 12;
+}
+
+/* Log style (mono) */
+.logArea {
+    -fx-font-family: "Consolas";
+    -fx-font-size: 12px;
+}
+
+/* ===== Buttons ===== */
+.button {
+    -fx-min-height: 38px;
     -fx-padding: 10 14 10 14;
-}
-
-.primaryBig {
-    -fx-background-color: #31e3c1;
-    -fx-text-fill: #07110f;
-    -fx-font-weight: 800;
-    -fx-font-size: 14px;
     -fx-background-radius: 12;
-    -fx-padding: 12 14 12 14;
+    -fx-border-radius: 12;
+    -fx-cursor: hand;
 }
+.button:pressed { -fx-scale-x: 0.98; -fx-scale-y: 0.98; }
+
+.actionButton { -fx-min-width: 140px; }
+
+       .primary{
+           -fx-background-color: linear-gradient(from 0% 50% to 100% 50%, -acc, -acc2);
+           -fx-text-fill: #001414;
+           -fx-font-weight: 900;
+       }
+
+       .primary:hover,
+       .primaryBig:hover{
+           -fx-background-color: linear-gradient(
+                   from 0% 50% to 100% 50%,
+                   -accAHi,
+                   -accBHi
+           );
+           -fx-effect: dropshadow(
+                   gaussian,
+                   rgba(0,255,255,0.35),
+                   26,
+                   0.4,
+                   0,
+                   0
+           );
+       }
+
+
+
+
+       .primaryBig{
+           -fx-background-color: linear-gradient(
+                   from 0% 50% to 100% 50%,
+                   -accA,
+                   -accB
+           );
+           -fx-text-fill: #001414;
+           -fx-font-weight: 900;
+       }
+
+
 
 .secondary {
     -fx-background-color: rgba(255,255,255,0.06);
-    -fx-text-fill: #e9edf5;
-    -fx-background-radius: 12;
-    -fx-border-color: rgba(255,255,255,0.10);
-    -fx-border-radius: 12;
-    -fx-padding: 10 14 10 14;
+    -fx-text-fill: -text;
+    -fx-border-color: rgba(255,255,255,0.12);
+}
+.secondary:hover {
+    -fx-background-color: rgba(255,255,255,0.10);
+    -fx-border-color: rgba(255,255,255,0.20);
 }
 
 .ghost {
     -fx-background-color: rgba(255,255,255,0.04);
-    -fx-background-radius: 10;
-    -fx-text-fill: #cbd5e6;
-    -fx-border-color: rgba(255,255,255,0.08);
-    -fx-border-radius: 10;
+    -fx-text-fill: rgba(238,242,255,0.86);
+    -fx-border-color: rgba(255,255,255,0.10);
+}
+.ghost:hover {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-border-color: rgba(255,255,255,0.16);
 }
 
 .ghostDanger {
-    -fx-background-color: rgba(255,120,120,0.08);
-    -fx-background-radius: 10;
+    -fx-background-color: rgba(255,120,120,0.12);
     -fx-text-fill: #ffb2b2;
-    -fx-border-color: rgba(255,120,120,0.18);
-    -fx-border-radius: 10;
+    -fx-border-color: rgba(255,120,120,0.22);
+}
+.ghostDanger:hover {
+    -fx-background-color: rgba(255,120,120,0.18);
+    -fx-border-color: rgba(255,120,120,0.32);
 }
 
-
-.logWrap {
-    -fx-padding: 16;
-}
-
-.logHeader {
-    -fx-padding: 0 0 6 0;
-}
-
-.logArea {
-    -fx-font-family: "Consolas";
-    -fx-font-size: 12px;
-    -fx-background-color: rgba(0,0,0,0.35);
-    -fx-background-radius: 12;
-    -fx-text-fill: #e9edf5;
-    -fx-border-color: rgba(255,255,255,0.08);
-    -fx-border-radius: 12;
-}
-
-.contentRoot {
-    -fx-padding: 24;
-}
-
-
-/* --- Layout helpers --- */
-.hGap10 { -fx-spacing: 10; }
-.vGap10 { -fx-spacing: 10; }
-.pad16 { -fx-padding: 16; }
-
-/* --- Header / top bar --- */
-.topbar {
-    -fx-padding: 16 18 12 18;
-    -fx-background-color: transparent;
-}
-
-.version {
-    -fx-text-fill: rgba(233,237,245,0.55);
-    -fx-font-size: 11px;
-}
-
-/* Status pill variants */
+/* ===== Status Pills ===== */
 .pillOk {
-    -fx-background-color: rgba(120, 180, 255, 0.12);
-    -fx-text-fill: #bcd7ff;
+    -fx-background-color: rgba(0,255,255,0.14);
+    -fx-text-fill: #bfffff;
+    -fx-border-color: rgba(0,255,255,0.32);
     -fx-padding: 6 10 6 10;
     -fx-background-radius: 999;
     -fx-border-radius: 999;
-    -fx-border-color: rgba(120, 180, 255, 0.25);
 }
-.pillBusy {
-    -fx-background-color: rgba(49, 227, 193, 0.12);
-    -fx-text-fill: #9ff3e5;
-    -fx-border-color: rgba(49, 227, 193, 0.25);
-}
+       .pillBusy{
+           -fx-background-color: rgba(0,255,255,0.10);
+           -fx-text-fill: #9ffcff;
+           -fx-border-color: rgba(0,255,255,0.22);
+       }
 .pillError {
     -fx-background-color: rgba(255, 120, 120, 0.10);
     -fx-text-fill: #ffb2b2;
     -fx-border-color: rgba(255, 120, 120, 0.20);
 }
 
-/* --- Buttons: stop the "..." crap --- */
-.button {
-    -fx-min-height: 36px;
-    -fx-padding: 10 14 10 14;
-}
-
-/* Give action buttons a minimum width so they don't ellipsis */
-.actionButton {
-    -fx-min-width: 128px;
-}
-
-/* Small icon-like button (e.g. ... menu) */
-.iconButton {
-    -fx-min-width: 38px;
-    -fx-min-height: 36px;
-    -fx-padding: 0;
-}
-
-/* --- Progress bar: slim --- */
-.progressSlim {
-    -fx-pref-height: 6px;
-    -fx-min-height: 6px;
-    -fx-max-height: 6px;
-    -fx-background-radius: 999;
-    -fx-border-radius: 999;
-}
-
-/* Tiny pill buttons for profile actions */
-.iconPill {
-    -fx-background-color: rgba(255,255,255,0.06);
-    -fx-text-fill: #cbd5e6;
-    -fx-background-radius: 999;
-    -fx-border-radius: 999;
-    -fx-border-color: rgba(255,255,255,0.10);
-    -fx-padding: 6 10 6 10;
-    -fx-font-size: 11px;
-}
-.iconPill:hover { -fx-background-color: rgba(255,255,255,0.10); }
-
-.iconPillDanger {
-    -fx-background-color: rgba(255,120,120,0.10);
-    -fx-text-fill: #ffb2b2;
-    -fx-background-radius: 999;
-    -fx-border-radius: 999;
-    -fx-border-color: rgba(255,120,120,0.22);
-    -fx-padding: 6 10 6 10;
-    -fx-font-size: 11px;
-}
-.iconPillDanger:hover { -fx-background-color: rgba(255,120,120,0.16); }
-
-/* Tabs */
-.tabs .tab-header-area .tab-header-background {
-    -fx-background-color: transparent;
-}
-.tabs .tab {
-    -fx-background-color: rgba(255,255,255,0.04);
-    -fx-background-radius: 10 10 0 0;
-    -fx-border-color: rgba(255,255,255,0.08);
-    -fx-border-radius: 10 10 0 0;
-}
-.tabs .tab:selected {
-    -fx-background-color: rgba(255,255,255,0.07);
-}
-.tabs .tab-label {
-    -fx-text-fill: #cbd5e6;
-    -fx-font-size: 12px;
-    -fx-font-weight: 700;
-}
-
-/* Make titledpane feel like a card */
-.titledCard > .title {
-    -fx-background-color: rgba(255,255,255,0.04);
-    -fx-background-radius: 10;
-    -fx-border-radius: 10;
-    -fx-border-color: rgba(255,255,255,0.08);
-}
-.titledCard > *.content {
-    -fx-background-color: transparent;
-}
-.mainSplit {
-    -fx-background-color: transparent;
-}
-
-.mainSplit > .split-pane-divider {
-    -fx-padding: 0 1 0 1;
-    -fx-background-color: rgba(255,255,255,0.08);
-}
-
-.mainSplit .contentRoot {
-    -fx-padding: 24;
-}
-.iconPill {
-    -fx-background-color: rgba(120, 180, 255, 0.08);
-    -fx-text-fill: #cfe2ff;
-    -fx-border-color: rgba(120, 180, 255, 0.18);
-}
-.iconPill:hover {
-    -fx-background-color: rgba(120, 180, 255, 0.12);
-    -fx-border-color: rgba(120, 180, 255, 0.26);
-}
-
-/* Colored action pills */
-.iconPillCreate {
-    -fx-background-color: rgba(49, 227, 193, 0.10);
-    -fx-text-fill: #9ff3e5;
-    -fx-background-radius: 999;
-    -fx-border-radius: 999;
-    -fx-border-color: rgba(49, 227, 193, 0.22);
-    -fx-padding: 6 10 6 10;
-    -fx-font-size: 11px;
-}
-.iconPillCreate:hover { -fx-background-color: rgba(49, 227, 193, 0.16); }
-
-.iconPillEdit {
-    -fx-background-color: rgba(120, 180, 255, 0.10);
-    -fx-text-fill: #cfe2ff;
-    -fx-background-radius: 999;
-    -fx-border-radius: 999;
-    -fx-border-color: rgba(120, 180, 255, 0.22);
-    -fx-padding: 6 10 6 10;
-    -fx-font-size: 11px;
-}
-.iconPillEdit:hover { -fx-background-color: rgba(120, 180, 255, 0.16); }
-
-.iconPillCopy {
-    -fx-background-color: rgba(255, 200, 120, 0.10);
-    -fx-text-fill: #ffd9a8;
-    -fx-background-radius: 999;
-    -fx-border-radius: 999;
-    -fx-border-color: rgba(255, 200, 120, 0.22);
-    -fx-padding: 6 10 6 10;
-    -fx-font-size: 11px;
-}
-.iconPillCopy:hover { -fx-background-color: rgba(255, 200, 120, 0.16); }
-
-.iconCreate { -fx-fill: #31e3c1; }
-.iconEdit   { -fx-fill: #7db4ff; }
-.iconCopy   { -fx-fill: #ffc878; }
-.iconDelete { -fx-fill: #ff8a8a; }
-
-.iconSmall {
-    -fx-scale-x: 0.85;
-    -fx-scale-y: 0.85;
-}
-
-/* Square icon buttons */
-
-/* Make SVG icons visible */
-.iconSvg {
-    -fx-stroke-width: 2.2;
-    -fx-stroke-line-cap: ROUND;
-    -fx-stroke-line-join: ROUND;
-    -fx-fill: transparent;           /* IMPORTANT: line icons */
-}
-
-/* Color variants (stroke-based) */
-.iconCreate { -fx-stroke: #31e3c1; }
-.iconEdit   { -fx-stroke: #7db4ff; }
-.iconCopy   { -fx-stroke: #ffc878; }
-.iconDelete { -fx-stroke: #ff8a8a; }
-
-.iconBtn:hover {
-    -fx-background-color: rgba(255,255,255,0.10);
-    -fx-border-color: rgba(255,255,255,0.16);
-}
-
+/* ===== Icon Buttons ===== */
 .iconBtn {
     -fx-min-width: 34px;
     -fx-min-height: 34px;
@@ -356,33 +253,133 @@
     -fx-alignment: CENTER;
 
     -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(255,255,255,0.12);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.18), 10, 0.35, 0, 3);
+    -fx-cursor: hand;
+}
+       .iconBtn:hover{
+           -fx-background-color: rgba(0,255,255,0.10);
+           -fx-border-color: rgba(0,255,255,0.45);
+           -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.18), 16, 0.30, 0, 0);
+           -fx-scale-x: 1.08;
+           -fx-scale-y: 1.08;
+       }
+
+
+
+.iconHint { -fx-text-fill: rgba(238,242,255,0.55); -fx-font-size: 10px; }
+
+/* ===== Progress ===== */
+.progressSlim {
+    -fx-pref-height: 6px;
+    -fx-min-height: 6px;
+    -fx-max-height: 6px;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+}
+.progress-bar .track {
+    -fx-background-color: rgba(255,255,255,0.08);
+    -fx-background-radius: 999;
+}
+       .progress-bar .bar{
+           -fx-background-radius: 999;
+           -fx-background-color: linear-gradient(from 0% 50% to 100% 50%, -acc, -acc2);
+       }
+
+
+/* ===== Tabs ===== */
+.tabs .tab-header-area .tab-header-background {
+    -fx-background-color: transparent;
+}
+.tabs .headers-region {
+    -fx-padding: 0 0 0 0;
+}
+.tabs .tab {
+    -fx-background-color: rgba(255,255,255,0.04);
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(255,255,255,0.10);
+    -fx-border-radius: 12;
+    -fx-padding: 6 12 6 12;
+}
+.tabs .tab:hover {
+    -fx-background-color: rgba(255,255,255,0.07);
+}
+       .tabs .tab:selected{
+           -fx-background-color: rgba(255,255,255,0.09);
+           -fx-border-color: rgba(0,255,255,0.45);
+       }
+
+       .tabs .tab:selected .tab-label{
+           -fx-text-fill: #eaffff;
+       }
+
+
+/* ===== SplitPane ===== */
+.mainSplit { -fx-background-color: transparent; }
+.mainSplit > .split-pane-divider {
+    -fx-padding: 0 1 0 1;
+    -fx-background-color: rgba(255,255,255,0.10);
+}
+
+/* ===== TitledPane ===== */
+.titledCard > .title {
+    -fx-background-color: rgba(255,255,255,0.04);
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
     -fx-border-color: rgba(255,255,255,0.10);
 }
+.titledCard > *.content { -fx-background-color: transparent; }
 
-.iconBtn:hover {
-    -fx-background-color: rgba(255,255,255,0.10);
-    -fx-border-color: rgba(255,255,255,0.16);
+/* ===== Scrollbars ===== */
+.scroll-bar:vertical, .scroll-bar:horizontal { -fx-background-color: transparent; }
+.scroll-bar .track {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-background-radius: 999;
+}
+.scroll-bar .thumb {
+    -fx-background-color: rgba(238,242,255,0.20);
+    -fx-background-radius: 999;
+}
+.scroll-bar .thumb:hover { -fx-background-color: rgba(238,242,255,0.28); }
+.scroll-bar .increment-button, .scroll-bar .decrement-button {
+    -fx-padding: 0;
+    -fx-background-color: transparent;
 }
 
+       .card.mainCard{
+           -fx-background-color: rgba(255,255,255,0.055);
+           -fx-border-color: rgba(0,255,255,0.18);
+           -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.07), 22, 0.35, 0, 10);
+       }
 
-.iconHint {
-    -fx-text-fill: rgba(233,237,245,0.55);
-    -fx-font-size: 10px;
-}
 
 
+       /* Selected Tab -> klar cyan */
+       .tabs .tab:selected{
+           -fx-border-color: rgba(0,255,255,0.55);
+           -fx-background-color: rgba(255,255,255,0.09);
+       }
+       .tabs .tab:selected .tab-label{
+           -fx-text-fill: #eaffff;
+       }
 
-.iconBtn {
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.15), 4, 0.5, 0, 1);
-    -fx-cursor: hand;
-    -fx-opacity: 0.9;
-    -fx-transition: all 0.2s ease;
-}
+       /* Live/Status pills -> cyan sichtbarer */
+       .pillOk{
+           -fx-background-color: rgba(0,255,255,0.16);
+           -fx-border-color: rgba(0,255,255,0.35);
+           -fx-text-fill: #cfffff;
+       }
 
-.iconBtn:hover {
-    -fx-background-color: rgba(255,255,255,0.14);
-    -fx-border-color: rgba(255,255,255,0.24);
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 6, 0.5, 0, 2);
-    -fx-scale-x: 1.1;
-    -fx-scale-y: 1.1;
-}
+       /* Primary (Start) -> mehr “neon” */
+       .primaryBig{
+           -fx-background-color: linear-gradient(from 0% 50% to 100% 50%, -acc, -acc2);
+           -fx-text-fill: #001414;
+           -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.30), 22, 0.35, 0, 0);
+       }
+       .primaryBig:hover{
+           -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.45), 28, 0.38, 0, 0);
+       }
+       .iconDelete{
+           -fx-fill: -danger;
+       }
+
