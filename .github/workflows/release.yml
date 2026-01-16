@@ -27,6 +27,12 @@ jobs:
           java-version: "24"
           cache: maven
 
+      - name: Setup Maven
+        uses: stCarolas/setup-maven@v5
+        with:
+          maven-version: "3.9.9"
+
+
       - name: Ensure WiX (needed for MSI)
         shell: powershell
         run: |
@@ -41,14 +47,30 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Read current version from pom.xml
+      - name: Read current version from pom.xml (no Maven)
         id: pom
         shell: powershell
         run: |
-          $v = (mvn -q -DforceStdout help:evaluate -Dexpression=project.version).Trim()
-          if (-not $v) { throw "Could not read project.version from pom.xml" }
-          "current=$v" >> $env:GITHUB_OUTPUT
+          if (-not (Test-Path "pom.xml")) { throw "pom.xml not found in repo root. Wrong working directory?" }
 
+          [xml]$pom = Get-Content "pom.xml"
+          $ns = New-Object System.Xml.XmlNamespaceManager($pom.NameTable)
+          $ns.AddNamespace("m", "http://maven.apache.org/POM/4.0.0")
+
+          $node = $pom.SelectSingleNode("/m:project/m:version", $ns)
+          if ($node -and $node.InnerText) {
+            $v = $node.InnerText.Trim()
+          } else {
+            # Falls die Version aus einem Parent kommt (optional)
+            $pnode = $pom.SelectSingleNode("/m:project/m:parent/m:version", $ns)
+            if (-not ($pnode -and $pnode.InnerText)) { throw "No <version> in pom.xml (and no parent version). Can't determine version." }
+            $v = $pnode.InnerText.Trim()
+          }
+
+          "current=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Detected version: $v"
+      
+      
 
       - name: Compute target version + tag
         id: ver
