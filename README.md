@@ -1,98 +1,122 @@
 # ModLauncher
 
-Ein **moderner, eigenständiger Minecraft Mod Launcher für Windows**, der sicherstellt,  
-dass **alle Spieler automatisch die gleiche Client-Umgebung verwenden** – ohne manuelle Mod- oder Config-Pflege.
+[Deutsch](README.de.md)
 
-Der ModLauncher unterscheidet dabei klar zwischen:
-- **Launcher-Updates** (Programm selbst)
-- **Modpack-Updates** (Mods, Configs, Projektdateien)
+A **modern, standalone Minecraft mod launcher for Windows** that ensures
+**all players automatically use the exact same client setup** – without manual mod or config management.
 
----
+ModLauncher clearly separates:
 
-## Warum ModLauncher?
-
-Typische Probleme bei Mod-Projekten:
-- Fehlende oder falsche Mod-Versionen
-- Manuelle Config-Anpassungen auf jedem Client
-- Verpasste Discord-Ankündigungen
-- Fehlgeschlagene Server-Joins und Support-Aufwand
-
-**ModLauncher löst diese Probleme konsequent.**
+* **Launcher updates** (the application itself)
+* **Modpack updates** (mods, configs, project files)
 
 ---
 
-## Update-Konzept (wichtig)
+## Why ModLauncher?
 
-### 🔄 Launcher-Updates
-- Betreffen **nur den Launcher selbst**
-- Prüfung **beim Start**
-- Update per:
-  - Klick auf **„Launcher aktualisieren“**
-  - oder Bestätigung per Dialog
-- Self-Update über **GitHub Releases**
-- Keine Neuinstallation nötig
+Common problems in modded Minecraft projects:
 
-➡️ Diese Updates sind **selten** und betreffen nur Funktionen, UI oder Bugfixes des Launchers.
+* Missing or wrong mod versions
+* Manual config changes on every client
+* Discord announcements being missed
+* Failed server joins and unnecessary support effort
+
+**ModLauncher solves these issues consistently.**
 
 ---
 
-### 📦 Modpack-Updates
-- Betreffen:
-  - Mods
-  - Configs
-  - weitere projektbezogene Dateien
-- Werden **vor jedem Spielstart automatisch geprüft**
-- Fehlende oder geänderte Dateien werden:
-  - heruntergeladen
-  - aktualisiert
-  - ersetzt
+## Update Concept (Important)
 
-➡️ Spieler müssen **nichts manuell tun**.  
-➡️ Joinen auf den Server funktioniert danach sofort.
+### 🔄 Launcher Updates
 
----
+* Affect **only the launcher itself**
+* Checked **on startup**
+* Updated via:
 
-## Kernfunktionen
+  * Clicking **"Update Launcher"**
+  * or confirming the update dialog
+* Self-updating via **GitHub Releases**
+* No reinstallation required
 
-- 🧩 Unterstützung für **Vanilla, Forge, Fabric**  
-  *(Quilt / NeoForge geplant)*
-- 🔄 Automatische **Modpack-Synchronisation vor jedem Start**
-- 🔁 **Self-Updating Launcher**
-- 📦 Zentrale Bereitstellung von Mods & Configs durch den Projektleiter
-- 🚀 Eigene **Java Runtime integriert**
-- 🎨 Moderne **JavaFX UI** (AtlantaFX / PrimerDark)
-- 🪟 **Windows MSI Installer**
-- 🛠 Saubere, modulare **Maven-Projektstruktur**
+➡️ These updates are **infrequent** and only affect launcher features, UI, or bug fixes.
 
 ---
 
-## Zielgruppe
+### 📦 Modpack Updates
 
-- Minecraft-Projektleiter
-- Modpack- & Server-Administratoren
-- Communities, die **keinen Client-Support** mehr wollen
+* Affect:
+
+  * Mods
+  * Config files
+  * Other project-related files
+* Checked **automatically before every game start**
+* Missing or changed files are:
+
+  * downloaded
+  * updated
+  * replaced
+
+➡️ No manual action required by players.
+➡️ Server join works immediately after.
 
 ---
 
-## Installation (Spieler)
+## Core Features
 
-1. MSI aus den **GitHub Releases** herunterladen
-2. Installer ausführen
-3. Launcher starten
-
-➡️ **Kein Java erforderlich**
+* 🧩 Support for **Vanilla, Forge, Fabric**
+  *(Quilt / NeoForge planned)*
+* 🔄 Automatic **modpack synchronization before launch**
+* 🔁 **Self-updating launcher**
+* 📦 Central hosting of mods & configs by the project owner
+* 🚀 Bundled **Java Runtime** (no Java installation required)
+* 🎨 Modern **JavaFX UI** (AtlantaFX / PrimerDark)
+* 🪟 **Windows MSI installer**
+* 🛠 Clean, modular **Maven project structure**
 
 ---
 
-## Entwicklung
+## Target Audience
 
-### Voraussetzungen
-- **JDK 24**
-- **Maven**
-- **Windows** (für MSI-Build via jpackage)
+* Minecraft project leads
+* Modpack and server administrators
+* Communities that want **zero client-side support**
+
+---
+
+## Installation (Players)
+
+1. Download the MSI from **GitHub Releases**
+2. Run the installer
+3. Start the launcher
+
+➡️ **No Java installation required**
+
+---
+
+## Development
+
+### Requirements
+
+* **JDK 24**
+* **Maven**
+* **Windows** (for MSI builds via jpackage)
 
 ### Build
 
 ```bash
 ./mvnw clean package
 ./mvnw jpackage:jpackage
+```
+
+---
+
+## Project Status
+
+Actively developed.
+Feedback and issues are welcome.
+
+---
+
+## License
+
+Not finalized yet.
