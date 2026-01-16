@@ -1,22 +1,54 @@
 # ModLauncher
 
-Ein **moderner, eigenständiger Minecraft Mod Launcher für Windows**, der ein zentrales Problem löst:  
-**Mods, Configs und Versionen müssen nicht mehr manuell gepflegt werden.**
+Ein **moderner, eigenständiger Minecraft Mod Launcher für Windows**, der sicherstellt,  
+dass **alle Spieler automatisch die gleiche Client-Umgebung verwenden** – ohne manuelle Mod- oder Config-Pflege.
 
-Der ModLauncher stellt sicher, dass **alle Spieler automatisch exakt die gleiche Client-Umgebung** haben –  
-ohne Java-Installation, ohne Mod-Chaos, ohne Support-Albtraum.
+Der ModLauncher unterscheidet dabei klar zwischen:
+- **Launcher-Updates** (Programm selbst)
+- **Modpack-Updates** (Mods, Configs, Projektdateien)
 
 ---
 
 ## Warum ModLauncher?
 
 Typische Probleme bei Mod-Projekten:
-- Spieler haben Mods nicht oder in falscher Version
-- Config-Änderungen müssen manuell erklärt werden
-- Discord-Ankündigungen werden übersehen
-- Server-Join schlägt fehl → Frust & Support
+- Fehlende oder falsche Mod-Versionen
+- Manuelle Config-Anpassungen auf jedem Client
+- Verpasste Discord-Ankündigungen
+- Fehlgeschlagene Server-Joins und Support-Aufwand
 
-**ModLauncher löst genau das.**
+**ModLauncher löst diese Probleme konsequent.**
+
+---
+
+## Update-Konzept (wichtig)
+
+### 🔄 Launcher-Updates
+- Betreffen **nur den Launcher selbst**
+- Prüfung **beim Start**
+- Update per:
+  - Klick auf **„Launcher aktualisieren“**
+  - oder Bestätigung per Dialog
+- Self-Update über **GitHub Releases**
+- Keine Neuinstallation nötig
+
+➡️ Diese Updates sind **selten** und betreffen nur Funktionen, UI oder Bugfixes des Launchers.
+
+---
+
+### 📦 Modpack-Updates
+- Betreffen:
+  - Mods
+  - Configs
+  - weitere projektbezogene Dateien
+- Werden **vor jedem Spielstart automatisch geprüft**
+- Fehlende oder geänderte Dateien werden:
+  - heruntergeladen
+  - aktualisiert
+  - ersetzt
+
+➡️ Spieler müssen **nichts manuell tun**.  
+➡️ Joinen auf den Server funktioniert danach sofort.
 
 ---
 
@@ -24,50 +56,31 @@ Typische Probleme bei Mod-Projekten:
 
 - 🧩 Unterstützung für **Vanilla, Forge, Fabric**  
   *(Quilt / NeoForge geplant)*
-- 🔄 **Automatische Installation & Updates** von:
-  - Mods
-  - Configs
-  - weiteren Projektdateien
-- 📦 **Zentrale Projektstruktur**  
-  → Host stellt Dateien bereit, Clients synchronisieren automatisch
-- 🚀 **Eigene Java Runtime integriert**  
-  → kein installiertes Java nötig
-- 🔁 **Self-Updater** über GitHub Releases
+- 🔄 Automatische **Modpack-Synchronisation vor jedem Start**
+- 🔁 **Self-Updating Launcher**
+- 📦 Zentrale Bereitstellung von Mods & Configs durch den Projektleiter
+- 🚀 Eigene **Java Runtime integriert**
 - 🎨 Moderne **JavaFX UI** (AtlantaFX / PrimerDark)
 - 🪟 **Windows MSI Installer**
-  - Startmenü-Eintrag
-  - Saubere Deinstallation
-- 🛠 Sauberes, modulares **Maven-Projekt**
+- 🛠 Saubere, modulare **Maven-Projektstruktur**
 
 ---
 
 ## Zielgruppe
 
 - Minecraft-Projektleiter
-- Modpack-Entwickler
-- Private & öffentliche Mod-Server
-- Communities, die **keine Lust auf Client-Support** haben
+- Modpack- & Server-Administratoren
+- Communities, die **keinen Client-Support** mehr wollen
 
 ---
 
 ## Installation (Spieler)
 
-1. MSI-Datei aus den **GitHub Releases** herunterladen
+1. MSI aus den **GitHub Releases** herunterladen
 2. Installer ausführen
-3. Launcher starten über:
-   - Startmenü → **ModLauncher**
-   - oder  
-     `C:\Program Files\ModLauncher\ModLauncher.exe`
+3. Launcher starten
 
-➡️ Java muss **nicht** installiert sein.
-
----
-
-## Updates
-
-- Automatische Update-Prüfung beim Start
-- Manuelle Update-Prüfung per Button
-- Launcher ersetzt sich selbst **ohne Neuinstallation**
+➡️ **Kein Java erforderlich**
 
 ---
 
