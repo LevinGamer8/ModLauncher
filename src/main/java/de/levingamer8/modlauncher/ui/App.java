@@ -20,6 +20,14 @@ public class App extends Application {
                 Objects.requireNonNull(App.class.getResource("/de/levingamer8/modlauncher/ui/theme.css")).toExternalForm()
         );
 
+        stage.getIcons().add(
+                new javafx.scene.image.Image(
+                        Objects.requireNonNull(
+                                App.class.getResourceAsStream("/icon.ico")
+                        )
+                )
+        );
+
         stage.setTitle("ModLauncher");
         stage.setScene(scene);
         stage.show();

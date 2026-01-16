@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.nio.file.Path;
 
 
+import de.levingamer8.modlauncher.update.UpdateController;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -52,6 +53,10 @@ public class Controller {
     @FXML private Button playButton;
     @FXML private Label loginStatusLabel;
     @FXML private Button loginButton;
+    @FXML private Button launcherUpdateButton;
+    @FXML private Label versionLabel;
+
+
 
 
     private final ConcurrentLinkedQueue<String> logQueue = new ConcurrentLinkedQueue<>();
@@ -66,6 +71,9 @@ public class Controller {
 
     private volatile MicrosoftMinecraftAuth.MinecraftSession mcSession;
     private MicrosoftSessionStore msStore;
+
+    private UpdateController launcherUpdater;
+
 
 
 
@@ -104,8 +112,31 @@ public class Controller {
         msStore = new MicrosoftSessionStore(profileStore.baseDir().resolve("auth").resolve("microsoft_session.json"));
         tryLoadSavedMicrosoftSession();
 
+        launcherUpdater = new UpdateController(
+                "LevinGamer8",
+                "ModLauncher"
+        );
+
+// Auto-Check beim Start (nicht nervig: nur Hinweis, wenn Update existiert)
+        Platform.runLater(() -> launcherUpdater.checkForUpdates(false));
+
+        if (versionLabel != null) {
+            versionLabel.setText("v" + detectVersion());
+        }
+
+        // Default-Status optisch korrekt
+        setStatus("Bereit", "pillOk");
+
+        // logArea defensiv
+        if (logArea != null) logArea.setEditable(false);
 
     }
+
+    @FXML
+    public void onLauncherUpdate() {
+        launcherUpdater.checkForUpdates(true);
+    }
+
 
     private void startLogFlusher() {
         if (logFlushTimeline != null) return;
@@ -537,13 +568,18 @@ public class Controller {
     }
 
     private void setUiBusy(boolean busy) {
-        updateButton.setDisable(busy);
-        openFolderButton.setDisable(busy);
-        profileCombo.setDisable(busy);
-        manifestUrlField.setDisable(busy);
-        playButton.setDisable(busy);
-        loginButton.setDisable(busy);
+        Node[] nodes = { updateButton, openFolderButton, playButton, loginButton, profileCombo, manifestUrlField, playerNameField, launcherUpdateButton };
+        for (Node n : nodes) if (n != null) n.setDisable(busy);
+
+        progressBar.setVisible(busy);
+        if (!busy) {
+            progressBar.setProgress(0);
+        } else {
+            setStatus(statusLabel.getText() == null || statusLabel.getText().isBlank() ? "Loading..." : statusLabel.getText(), "pillBusy");
+        }
     }
+
+
 
     private void appendLog(String s) {
         // NICHT direkt in die TextArea schreiben -> nur queue
@@ -631,9 +667,11 @@ public class Controller {
 
             // Optional: playerNameField automatisch setzen
             if (playerNameField != null) playerNameField.setText(mcSession.playerName());
+            setStatus("Fertig", "pillOk");
         });
 
         task.setOnFailed(e -> {
+            setStatus("Fehler", "pillError");
             Throwable ex = task.getException();
             setLoginStatus("Login fehlgeschlagen");
             appendLog("[LOGIN] ERROR: " + (ex != null ? ex.toString() : "unknown"));
@@ -642,7 +680,20 @@ public class Controller {
         new Thread(task, "ms-login").start();
     }
 
+    private void setStatus(String text, String pillStyle) {
+        Platform.runLater(() -> {
+            statusLabel.textProperty().unbind();
+            statusLabel.setText(text);
+            statusLabel.getStyleClass().removeAll("pillOk", "pillBusy", "pillError");
+            statusLabel.getStyleClass().add(pillStyle);
+        });
+    }
 
+    private String detectVersion() {
+        // kommt aus Manifest Implementation-Version (Gradle/Maven setzen, siehe unten)
+        String v = getClass().getPackage().getImplementationVersion();
+        return (v == null || v.isBlank()) ? "dev" : v;
+    }
 
 
     @FXML

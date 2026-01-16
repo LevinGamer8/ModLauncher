@@ -140,3 +140,67 @@
 }
 
 
+/* --- Layout helpers --- */
+.hGap10 { -fx-spacing: 10; }
+.vGap10 { -fx-spacing: 10; }
+.pad16 { -fx-padding: 16; }
+
+/* --- Header / top bar --- */
+.topbar {
+    -fx-padding: 16 18 12 18;
+    -fx-background-color: transparent;
+}
+
+.version {
+    -fx-text-fill: rgba(233,237,245,0.55);
+    -fx-font-size: 11px;
+}
+
+/* Status pill variants */
+.pillOk {
+    -fx-background-color: rgba(120, 180, 255, 0.12);
+    -fx-text-fill: #bcd7ff;
+    -fx-padding: 6 10 6 10;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+    -fx-border-color: rgba(120, 180, 255, 0.25);
+}
+.pillBusy {
+    -fx-background-color: rgba(49, 227, 193, 0.12);
+    -fx-text-fill: #9ff3e5;
+    -fx-border-color: rgba(49, 227, 193, 0.25);
+}
+.pillError {
+    -fx-background-color: rgba(255, 120, 120, 0.10);
+    -fx-text-fill: #ffb2b2;
+    -fx-border-color: rgba(255, 120, 120, 0.20);
+}
+
+/* --- Buttons: stop the "..." crap --- */
+.button {
+    -fx-min-height: 36px;
+    -fx-padding: 10 14 10 14;
+}
+
+/* Give action buttons a minimum width so they don't ellipsis */
+.actionButton {
+    -fx-min-width: 128px;
+}
+
+/* Small icon-like button (e.g. ... menu) */
+.iconButton {
+    -fx-min-width: 38px;
+    -fx-min-height: 36px;
+    -fx-padding: 0;
+}
+
+/* --- Progress bar: slim --- */
+.progressSlim {
+    -fx-pref-height: 6px;
+    -fx-min-height: 6px;
+    -fx-max-height: 6px;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+}
+
+

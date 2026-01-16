@@ -5,7 +5,7 @@
 
     <groupId>de.levingamer8</groupId>
     <artifactId>modlauncher</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.3</version>
     <name>ModLauncher</name>
 
     <properties>
@@ -83,15 +83,97 @@
 
     <build>
         <plugins>
-            <!-- JavaFX Maven Plugin -->
+            <!-- Copy runtime deps into the jpackage input folder -->
             <plugin>
-                <groupId>org.openjfx</groupId>
-                <artifactId>javafx-maven-plugin</artifactId>
-                <version>0.0.8</version>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.7.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-runtime-deps</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/jpackage/input</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-main-jar-to-jpackage-input</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/jpackage/input</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.build.directory}</directory>
+                                    <includes>
+                                        <include>${project.build.finalName}.jar</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.panteleyev</groupId>
+                <artifactId>jpackage-maven-plugin</artifactId>
+                <version>1.7.1</version>
                 <configuration>
+                    <name>ModLauncher</name>
+                    <appVersion>${project.version}</appVersion>
+
+                    <type>MSI</type>
+                    <destination>${project.build.directory}/installer</destination>
+
+                    <input>${project.build.directory}/jpackage/input</input>
+                    <mainJar>${project.build.finalName}.jar</mainJar>
                     <mainClass>de.levingamer8.modlauncher.Main</mainClass>
+
+                    <icon>${project.basedir}/src/main/resources/icon.ico</icon>
+                    <vendor>LevinGamer8</vendor>
+                    <winMenu>true</winMenu>
+                    <winShortcut>true</winShortcut>
+                    <winUpgradeUuid>1bf1d871-805c-4af3-805b-aa9b1693af6c</winUpgradeUuid>
+                    <winMenu>true</winMenu>
+                    <winShortcut>true</winShortcut>
                 </configuration>
             </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                            <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
+                        </manifest>
+                        <manifestEntries>
+                            <Implementation-Version>${project.version}</Implementation-Version>
+                            <Implementation-Title>${project.name}</Implementation-Title>
+                        </manifestEntries>
+                    </archive>
+                </configuration>
+            </plugin>
+
+
         </plugins>
     </build>
 </project>
