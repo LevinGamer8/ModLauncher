@@ -93,7 +93,7 @@ Common problems in modded Minecraft projects:
 
 ---
 
-##Planned featues
+## Planned featues
 
 * a user-friendly method to host own projects (currently not really possible for users)
 * Quilt and NeoForge support
