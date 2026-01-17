@@ -7,6 +7,7 @@ import de.levingamer8.modlauncher.runtime.JavaRuntimeManager;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.file.*;
+import java.time.Instant;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -28,6 +29,20 @@ public final class MinecraftLauncherService {
     private final MojangVersionResolver resolver = new MojangVersionResolver();
     private final LibraryService libraryService = new LibraryService();
 
+    private final ProcessWatcher mcWatcher = new ProcessWatcher();
+    private volatile PlaytimeStore playtime;
+
+
+    public boolean isMinecraftRunning() {
+        return mcWatcher.isRunning();
+    }
+
+    public String getTotalPlaytimePretty() {
+        PlaytimeStore p = playtime;
+        return (p == null) ? "0h 00m 00s" : p.getTotalPretty();
+    }
+
+
     public void launch(Path sharedRoot,
                        Path instanceGameDir,
                        Path instanceRuntimeDir,
@@ -36,7 +51,19 @@ public final class MinecraftLauncherService {
                        Consumer<String> log) throws Exception {
 
         final Consumer<String> L = safeLog(log);
+        // NEU: PlaytimeStore 1x initialisieren (Speicherort: sharedRoot)
+        if (this.playtime == null) {
+            this.playtime = new PlaytimeStore(sharedRoot.resolve("playtime.properties"));
 
+            // Listener nur 1x registrieren (sonst doppelt zählen wenn launch() mehrfach aufgerufen wird)
+            mcWatcher.addListener(new ProcessWatcher.Listener() {
+                @Override
+                public void onExited(Process process, Instant startedAt, Instant endedAt, int exitCode) {
+                    playtime.addSession(startedAt, endedAt);
+                    L.accept("[PLAYTIME] Total: " + playtime.getTotalPretty());
+                }
+            });
+        }
         // --- dirs ---
         Files.createDirectories(sharedRoot);
         Files.createDirectories(instanceGameDir);
@@ -169,7 +196,10 @@ public final class MinecraftLauncherService {
         pb.directory(instanceGameDir.toFile());
         pb.redirectErrorStream(true);
 
-        Process p = pb.start();
+        Process p = mcWatcher.start(pb);
+
+
+
         try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
             String line;
             while ((line = r.readLine()) != null) {
