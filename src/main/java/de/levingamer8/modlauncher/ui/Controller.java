@@ -7,7 +7,9 @@ import de.levingamer8.modlauncher.core.ProfileStore;
 import de.levingamer8.modlauncher.core.ProfileStore.Profile;
 import de.levingamer8.modlauncher.core.LoaderType;
 import de.levingamer8.modlauncher.host.CreateHostProjectRequest;
+import de.levingamer8.modlauncher.host.HostManifestGenerator;
 import de.levingamer8.modlauncher.host.HostProjectCreator;
+import de.levingamer8.modlauncher.host.LatestPointer;
 import de.levingamer8.modlauncher.host.modrinth.ModrinthClient;
 import de.levingamer8.modlauncher.host.modrinth.SearchHit;
 import de.levingamer8.modlauncher.host.modrinth.Version;
@@ -49,32 +51,50 @@ import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 
 
-import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.awt.Desktop;
 
 public class Controller {
 
-    @FXML private ComboBox<Profile> profileCombo;
+    @FXML
+    private ComboBox<Profile> profileCombo;
 
-    @FXML private Button updateButton;
-    @FXML private Button openFolderButton;
-    @FXML private ProgressBar progressBar;
-    @FXML private TextArea logArea;
-    @FXML private Label statusLabel;
-    @FXML private Button playButton;
-    @FXML private Label loginStatusLabel;
-    @FXML private Button loginButton;
-    @FXML private Button launcherUpdateButton;
-    @FXML private Label versionLabel;
-    @FXML private TextArea changelogArea;
-    @FXML private Label serverStatusLabel;
-    @FXML private Label serverDetailsLabel;
-    @FXML private Label packInfoLabel;
-    @FXML private SplitPane mainSplit;
-    @FXML private TitledPane logPane;
-    @FXML private ImageView skinView;
-    @FXML private Label accountNameLabel;
+    @FXML
+    private Button updateButton;
+    @FXML
+    private Button openFolderButton;
+    @FXML
+    private ProgressBar progressBar;
+    @FXML
+    private TextArea logArea;
+    @FXML
+    private Label statusLabel;
+    @FXML
+    private Button playButton;
+    @FXML
+    private Label loginStatusLabel;
+    @FXML
+    private Button loginButton;
+    @FXML
+    private Button launcherUpdateButton;
+    @FXML
+    private Label versionLabel;
+    @FXML
+    private TextArea changelogArea;
+    @FXML
+    private Label serverStatusLabel;
+    @FXML
+    private Label serverDetailsLabel;
+    @FXML
+    private Label packInfoLabel;
+    @FXML
+    private SplitPane mainSplit;
+    @FXML
+    private TitledPane logPane;
+    @FXML
+    private ImageView skinView;
+    @FXML
+    private Label accountNameLabel;
 
 
     private final ConcurrentLinkedQueue<String> logQueue = new ConcurrentLinkedQueue<>();
@@ -117,8 +137,15 @@ public class Controller {
             }
         });
         profileCombo.setConverter(new StringConverter<>() {
-            @Override public String toString(Profile p) { return p == null ? "" : p.name(); }
-            @Override public Profile fromString(String s) { return null; } // nicht editierbar -> egal
+            @Override
+            public String toString(Profile p) {
+                return p == null ? "" : p.name();
+            }
+
+            @Override
+            public Profile fromString(String s) {
+                return null;
+            } // nicht editierbar -> egal
         });
 
         reloadProfilesAndSelect(null);
@@ -401,7 +428,6 @@ public class Controller {
     }
 
 
-
     @FXML
     public void onUpdate() {
         Profile p = profileCombo.getValue();
@@ -529,7 +555,7 @@ public class Controller {
                         gameDir,
                         runtimeDir,
                         new MinecraftLauncherService.LaunchSpec(
-                                manifest.minecraft(),
+                                manifest.minecraftVersion(),
                                 loaderType,
                                 loaderVer,
                                 4096
@@ -630,8 +656,6 @@ public class Controller {
     }
 
 
-
-
     private void appendLog(String s) {
         // NICHT direkt in die TextArea schreiben -> nur queue
         if (s == null) return;
@@ -712,7 +736,10 @@ public class Controller {
         });
 
         openBtn.addEventFilter(ActionEvent.ACTION, e -> {
-            try { Desktop.getDesktop().browse(java.net.URI.create(verificationUrl)); } catch (Exception ignored) {}
+            try {
+                Desktop.getDesktop().browse(java.net.URI.create(verificationUrl));
+            } catch (Exception ignored) {
+            }
             e.consume();
         });
 
@@ -724,7 +751,6 @@ public class Controller {
         d.show();
 
     }
-
 
 
     @FXML
@@ -748,7 +774,10 @@ public class Controller {
                     setLoginStatus("Code kopiert: " + dc.userCode());
 
                     // Browser optional automatisch öffnen ODER nur Dialogbutton
-                    try { Desktop.getDesktop().browse(java.net.URI.create(dc.verificationUri())); } catch (Exception ignored) {}
+                    try {
+                        Desktop.getDesktop().browse(java.net.URI.create(dc.verificationUri()));
+                    } catch (Exception ignored) {
+                    }
 
                     showDeviceCodeDialog(dc.userCode(), dc.verificationUri());
                 });
@@ -839,17 +868,30 @@ public class Controller {
     }
 
 
-
     private ManifestModels.Manifest fetchManifest(String url) throws Exception {
         var om = new com.fasterxml.jackson.databind.ObjectMapper();
         var client = java.net.http.HttpClient.newBuilder()
                 .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
                 .build();
+
+        // 1) Wenn URL auf latest.json zeigt -> erst pointer lesen
+        if (url.endsWith("latest.json")) {
+            var req1 = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).GET().build();
+            var resp1 = client.send(req1, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (resp1.statusCode() != 200) throw new RuntimeException("latest HTTP " + resp1.statusCode());
+
+            LatestPointer latest = om.readValue(resp1.body(), LatestPointer.class);
+            url = latest.manifestUrl(); // <- jetzt manifest.json URL
+        }
+
+        // 2) manifest.json laden
         var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).GET().build();
         var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() != 200) throw new RuntimeException("Manifest HTTP " + resp.statusCode());
+
         return om.readValue(resp.body(), ManifestModels.Manifest.class);
     }
+
 
     private void updateAccountUi() {
         Platform.runLater(() -> {
@@ -938,7 +980,10 @@ public class Controller {
 
     private void closeLoginDialogIfOpen() {
         if (loginDialog != null) {
-            try { loginDialog.close(); } catch (Exception ignored) {}
+            try {
+                loginDialog.close();
+            } catch (Exception ignored) {
+            }
             loginDialog = null;
         }
     }
@@ -1064,11 +1109,7 @@ public class Controller {
         }
     }
 
-    public void openModrinthSearchAndAdd(
-            String mcVersion,
-            LoaderType loaderType,
-            Path modsDir
-    ) {
+    public void openModrinthSearchAndAdd(String mcVersion, LoaderType loaderType, Path modsDir) {
         if (loaderType == LoaderType.VANILLA) {
             showError("Modrinth Search: Vanilla hat keine Mods im Sinne von Forge/Fabric.");
             return;
@@ -1076,6 +1117,9 @@ public class Controller {
 
         String modrinthLoader = LoaderType.toString(loaderType);
         ModrinthClient api = new ModrinthClient();
+
+        final int pageSize = 50;
+        final java.util.concurrent.atomic.AtomicInteger offset = new java.util.concurrent.atomic.AtomicInteger(0);
 
         Dialog<Void> dialog = new Dialog<>();
         dialog.initModality(Modality.WINDOW_MODAL);
@@ -1085,7 +1129,6 @@ public class Controller {
         ButtonType closeBtn = new ButtonType("Schließen", ButtonBar.ButtonData.CANCEL_CLOSE);
         dialog.getDialogPane().getButtonTypes().add(closeBtn);
 
-        // --- UI Controls ---
         TextField query = new TextField();
         query.setPromptText("Mod suchen (z.B. sodium, jei, iris...)");
 
@@ -1094,6 +1137,11 @@ public class Controller {
         Button searchBtn = new Button("Suchen");
         searchBtn.setDefaultButton(true);
 
+        Button prevBtn = new Button("<");
+        Button nextBtn = new Button(">");
+        prevBtn.setDisable(true);
+        nextBtn.setDisable(true);
+
         ProgressIndicator progress = new ProgressIndicator();
         progress.setVisible(false);
         progress.setMaxSize(18, 18);
@@ -1101,58 +1149,51 @@ public class Controller {
         Label status = new Label();
         status.setMinHeight(18);
 
+        Label pageInfo = new Label();
+        pageInfo.setMinHeight(18);
+
         ListView<SearchHit> list = new ListView<>();
         list.setCellFactory(lv -> new ListCell<>() {
-            private String expectedIconUrl;
 
             private final ImageView icon = new ImageView();
             private final Label title = new Label();
-            private final Label meta  = new Label();
-            private final Label desc  = new Label();
+            private final Label meta = new Label();
+            private final Label desc = new Label();
 
             private final VBox textBox = new VBox(2, title, meta, desc);
             private final HBox row = new HBox(10, icon, textBox);
+            private final VBox root = new VBox(8, row);
 
-            private final Separator sep = new Separator();
-            private final VBox root = new VBox(8, row, sep);
+            // Guard pro Cell (wichtig wegen Cell-Recycling)
+            private String expectedIconUrl;
 
             {
-                // icon
-                icon.setFitWidth(64);
-                icon.setFitHeight(64);
+                icon.setFitWidth(28);
+                icon.setFitHeight(28);
                 icon.setPreserveRatio(true);
                 icon.setSmooth(true);
 
-                // text styles (ohne CSS geht auch direkt)
                 title.setStyle("-fx-font-weight: bold; -fx-font-size: 13px;");
                 meta.setStyle("-fx-opacity: 0.75; -fx-font-size: 11px;");
                 desc.setStyle("-fx-opacity: 0.9; -fx-font-size: 12px;");
                 desc.setWrapText(true);
 
-                // layout
-                row.setFillHeight(true);
                 HBox.setHgrow(textBox, Priority.ALWAYS);
+                textBox.prefWidthProperty().bind(lv.widthProperty().subtract(90));
 
-                // damit WrapText wirklich funktioniert:
-                textBox.prefWidthProperty().bind(lv.widthProperty().subtract(70));
-
-                // Separator etwas dezenter
-                sep.setOpacity(0.35);
-                sep.setVisible(false);
-                sep.setManaged(false);
+                root.setPadding(new Insets(8, 10, 8, 10));
+                root.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 10;");
 
                 this.hoverProperty().addListener((obs, o, n) -> {
                     root.setStyle(n
                             ? "-fx-background-color: rgba(255,255,255,0.06); -fx-background-radius: 10;"
                             : "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 10;");
                 });
-
             }
 
             @Override
             protected void updateItem(SearchHit item, boolean empty) {
                 super.updateItem(item, empty);
-
                 if (empty || item == null) {
                     setGraphic(null);
                     return;
@@ -1168,51 +1209,36 @@ public class Controller {
                 expectedIconUrl = item.icon_url();
                 loadIconAsync(expectedIconUrl, icon, () -> expectedIconUrl);
 
-
-                boolean isLast = (getIndex() == lv.getItems().size() - 1);
-                sep.setVisible(!isLast);
-                sep.setManaged(!isLast);
-
                 setGraphic(root);
             }
         });
 
-
-
         Button addBtn = new Button("Add to Pack");
+        Button genBtn = new Button("Generate Manifest");
+        genBtn.setDisable(true);
+
         addBtn.setDisable(true);
 
-        // enable add button when selection exists
         list.getSelectionModel().selectedItemProperty().addListener((obs, o, n) -> addBtn.setDisable(n == null));
         list.setOnMouseClicked(e -> {
             if (e.getClickCount() == 2) addBtn.fire();
         });
 
-
-        // Layout
-        HBox top = new HBox(10, query, searchBtn, progress);
+        HBox top = new HBox(10, query, searchBtn, progress, prevBtn, nextBtn);
         HBox.setHgrow(query, Priority.ALWAYS);
 
-        VBox root = new VBox(10,
-                ctx,
-                top,
-                list,
-                new HBox(10, addBtn),
-                status
-        );
-        root.setPadding(new Insets(8, 10, 8, 10));
-        root.setStyle("""
-             -fx-background-color: rgba(255,255,255,0.03);
-             -fx-background-radius: 10;
-        """);
+        HBox bottom = new HBox(10, status, new Region(), pageInfo);
+        HBox.setHgrow(bottom.getChildren().get(1), Priority.ALWAYS);
+
+        VBox root = new VBox(10, ctx, top, list, new HBox(10, addBtn, genBtn), bottom);
+        root.setPadding(new Insets(12));
         VBox.setVgrow(list, Priority.ALWAYS);
 
         dialog.getDialogPane().setContent(root);
-        dialog.getDialogPane().setPrefSize(720, 520);
+        dialog.getDialogPane().setPrefSize(900, 650);
         dialog.setResizable(true);
 
-        // --- Actions ---
-        Runnable doSearch = () -> {
+        java.util.function.IntConsumer doSearch = (off) -> {
             String q = query.getText() == null ? "" : query.getText().trim();
             if (q.isEmpty()) {
                 status.setText("Bitte Suchbegriff eingeben.");
@@ -1222,20 +1248,42 @@ public class Controller {
             progress.setVisible(true);
             searchBtn.setDisable(true);
             addBtn.setDisable(true);
+            prevBtn.setDisable(true);
+            nextBtn.setDisable(true);
             status.setText("Suche…");
+            pageInfo.setText("");
 
-            Task<java.util.List<SearchHit>> t = new Task<>() {
-                @Override protected java.util.List<SearchHit> call() throws Exception {
-                    return api.searchModsPage(q, modrinthLoader, mcVersion, 50, 0).hits();
+            Task<de.levingamer8.modlauncher.host.modrinth.SearchResponse> t = new Task<>() {
+                @Override
+                protected de.levingamer8.modlauncher.host.modrinth.SearchResponse call() throws Exception {
+                    return api.searchModsPage(q, modrinthLoader, mcVersion, pageSize, off);
                 }
             };
 
             t.setOnSucceeded(ev -> {
-                List<SearchHit> hits = t.getValue();
+                var resp = t.getValue();
+                var hits = resp.hits();
+
                 list.getItems().setAll(hits);
-                status.setText(hits.isEmpty() ? "Keine Treffer." : ("Treffer: " + hits.size()));
+                if (!hits.isEmpty()) list.scrollTo(0);
+
                 progress.setVisible(false);
                 searchBtn.setDisable(false);
+
+                int total = resp.total_hits();
+                int curOff = resp.offset();
+                int lim = resp.limit();
+
+                int page = (lim <= 0) ? 1 : (curOff / lim) + 1;
+                int pages = (lim <= 0) ? 1 : (int) Math.ceil(total / (double) lim);
+
+                status.setText(hits.isEmpty() ? "Keine Treffer." : ("Treffer: " + hits.size()));
+                pageInfo.setText("Seite " + page + "/" + pages + " • " + total + " gesamt");
+
+                prevBtn.setDisable(curOff <= 0);
+                nextBtn.setDisable(curOff + lim >= total);
+
+                offset.set(curOff);
             });
 
             t.setOnFailed(ev -> {
@@ -1251,10 +1299,58 @@ public class Controller {
             th.start();
         };
 
-        searchBtn.setOnAction(e -> doSearch.run());
-        query.setOnAction(e -> doSearch.run()); // Enter in TextField
+        searchBtn.setOnAction(e -> doSearch.accept(0));
+        query.setOnAction(e -> doSearch.accept(0));
+
+        prevBtn.setOnAction(e -> doSearch.accept(Math.max(0, offset.get() - pageSize)));
+        nextBtn.setOnAction(e -> doSearch.accept(offset.get() + pageSize));
+
+        Path filesDir = modsDir.getParent();                // .../files
+        Path manifestPath = filesDir.getParent().resolve("manifest.json"); // .../manifest.json
+        genBtn.setDisable(false);
+
+        genBtn.setOnAction(e -> {
+            progress.setVisible(true);
+            searchBtn.setDisable(true);
+            addBtn.setDisable(true);
+            genBtn.setDisable(true);
+            status.setText("Generiere Manifest...");
+
+            Task<Void> gen = new Task<>() {
+                @Override protected Void call() throws Exception {
+                    new HostManifestGenerator().generate(manifestPath, filesDir);
+                    return null;
+                }
+            };
+
+            gen.setOnSucceeded(ev -> {
+                progress.setVisible(false);
+                searchBtn.setDisable(false);
+                addBtn.setDisable(false);
+                genBtn.setDisable(false);
+                status.setText("Manifest aktualisiert.");
+                appendLog("[HOST] Manifest aktualisiert: " + manifestPath);
+            });
+
+            gen.setOnFailed(ev -> {
+                progress.setVisible(false);
+                searchBtn.setDisable(false);
+                addBtn.setDisable(false);
+                genBtn.setDisable(false);
+                status.setText("Manifest-Fehler");
+                Throwable ex = gen.getException();
+                showError("Manifest Generierung fehlgeschlagen:\n" + (ex == null ? "unknown" : ex.getMessage()));
+            });
+
+            Thread th = new Thread(gen, "host-manifest-gen");
+            th.setDaemon(true);
+            th.start();
+        });
+
+
 
         addBtn.setOnAction(e -> {
+
             SearchHit sel = list.getSelectionModel().getSelectedItem();
             if (sel == null) return;
 
@@ -1264,23 +1360,46 @@ public class Controller {
             status.setText("Downloade & füge hinzu: " + sel.title());
 
             Task<Path> t = new Task<>() {
-                @Override protected Path call() throws Exception {
-                    // best compatible version for loader+mc
+                @Override
+                protected Path call() throws Exception {
                     Version v = api.getBestVersion(sel.project_id(), modrinthLoader, mcVersion);
-                    // download jar into mods folder
                     return api.downloadPrimaryJar(v, modsDir);
                 }
             };
 
             t.setOnSucceeded(ev -> {
                 Path jar = t.getValue();
-                progress.setVisible(false);
-                searchBtn.setDisable(false);
-                status.setText("Hinzugefügt: " + jar.getFileName());
-                appendLog("[HOST] Mod hinzugefügt: " + jar.getFileName() + " -> " + jar);
+                appendLog("[HOST] Mod hinzugefügt: " + jar.getFileName());
 
-                // optional: auto-refresh manifest later, not here
+                // Manifest direkt aktualisieren
+                Task<Void> gen = new Task<>() {
+                    @Override protected Void call() throws Exception {
+                        new HostManifestGenerator().generate(manifestPath, filesDir);
+                        return null;
+                    }
+                };
+
+                gen.setOnSucceeded(ev2 -> {
+                    progress.setVisible(false);
+                    searchBtn.setDisable(false);
+                    status.setText("Hinzugefügt + Manifest updated: " + jar.getFileName());
+                    appendLog("[HOST] Manifest aktualisiert: " + manifestPath);
+                });
+
+                gen.setOnFailed(ev2 -> {
+                    progress.setVisible(false);
+                    searchBtn.setDisable(false);
+                    status.setText("Mod hinzugefügt, aber Manifest-Fehler");
+                    Throwable ex = gen.getException();
+                    showError("Mod hinzugefügt (" + jar.getFileName() + "), aber Manifest-Update fehlgeschlagen:\n"
+                            + (ex == null ? "unknown" : ex.getMessage()));
+                });
+
+                Thread th2 = new Thread(gen, "host-manifest-gen");
+                th2.setDaemon(true);
+                th2.start();
             });
+
 
             t.setOnFailed(ev -> {
                 Throwable ex = t.getException();
@@ -1295,7 +1414,6 @@ public class Controller {
             th.start();
         });
 
-        // show dialog
         dialog.showAndWait();
     }
 

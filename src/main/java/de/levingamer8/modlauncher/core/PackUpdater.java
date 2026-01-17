@@ -17,6 +17,13 @@ public class PackUpdater {
     private final HttpClientEx http = new HttpClientEx();
     private final StateStore stateStore = new StateStore();
 
+    private static final List<String> MANAGED_ROOTS = List.of(
+            "mods",
+            "config",
+            "defaultconfigs"
+    );
+
+
     public void update(ProfileStore.Profile profile,
                        ProfileStore profileStore,
                        Consumer<String> log,
@@ -97,8 +104,13 @@ public class PackUpdater {
                 log.accept("Installiert: " + f.path());
             }
 
-            // Schritt 2: cleanup mods (löscht extra .jar in mods/)
-            cleanupMods(installDir, clientFiles, log);
+            // Schritt 2: cleanup managed dirs (löscht alles, was nicht im Manifest steht)
+            Set<String> expected = clientFiles.stream()
+                    .map(f -> f.path().replace('\\','/'))
+                    .collect(Collectors.toSet());
+            deleteUnmanagedFiles(installDir, expected, log);
+
+
 
 
 
@@ -143,6 +155,51 @@ public class PackUpdater {
         if (side == null) return true; // default: nehmen wir mal als client/both
         return side.equalsIgnoreCase("client") || side.equalsIgnoreCase("both");
     }
+
+    private static java.util.Set<String> buildExpectedPaths(de.levingamer8.modlauncher.core.ManifestModels.Manifest manifest) {
+        return manifest.files().stream()
+                .map(f -> f.path().replace('\\', '/'))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+
+    private static void deleteUnmanagedFiles(Path gameDir, Set<String> expected, Consumer<String> log) throws IOException {
+        for (String root : MANAGED_ROOTS) {
+            Path rootDir = gameDir.resolve(root);
+            if (!Files.isDirectory(rootDir)) continue;
+
+            List<Path> toDelete;
+            try (var stream = Files.walk(rootDir)) {
+                toDelete = stream
+                        .filter(Files::isRegularFile)
+                        .filter(p -> {
+                            String rel = gameDir.relativize(p).toString().replace('\\', '/');
+                            return !expected.contains(rel);
+                        })
+                        .toList();
+            }
+
+            for (Path p : toDelete) {
+                String rel = gameDir.relativize(p).toString().replace('\\', '/');
+                Files.deleteIfExists(p);
+                if (log != null) log.accept("[SYNC] deleted: " + rel);
+                cleanupEmptyParents(p.getParent(), rootDir);
+            }
+        }
+    }
+
+
+    private static void cleanupEmptyParents(Path dir, Path stopAt) throws java.io.IOException {
+        Path cur = dir;
+        while (cur != null && cur.startsWith(stopAt) && !cur.equals(stopAt)) {
+            try (var ds = java.nio.file.Files.newDirectoryStream(cur)) {
+                if (ds.iterator().hasNext()) break; // not empty
+            }
+            java.nio.file.Files.deleteIfExists(cur);
+            cur = cur.getParent();
+        }
+    }
+
 
     private void cleanupMods(Path installDir, List<ManifestFile> clientFiles, Consumer<String> log) throws IOException {
     Path modsDir = installDir.resolve("mods");

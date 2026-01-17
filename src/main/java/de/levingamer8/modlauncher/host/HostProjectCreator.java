@@ -3,11 +3,13 @@ package de.levingamer8.modlauncher.host;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import de.levingamer8.modlauncher.core.LoaderType;
+import de.levingamer8.modlauncher.core.ManifestModels;
 
 import java.io.IOException;
 import java.nio.file.*;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Pattern;
 
 public class HostProjectCreator {
@@ -18,6 +20,18 @@ public class HostProjectCreator {
     public HostProjectCreator() {
         this.om = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
     }
+
+    public record Manifest(
+            String packId,
+            String packName,
+            int packVersion,
+            String minecraft,
+            ManifestModels.Loader loader,
+            String baseUrl,
+            List<ManifestModels.ManifestFile> files,
+            ManifestModels.Overrides overrides
+    ) {}
+
 
     public HostProjectPaths create(CreateHostProjectRequest req) throws IOException {
         validate(req);
@@ -51,18 +65,25 @@ public class HostProjectCreator {
         String manifestUrl = normalizeBaseUrl(req.baseUrl()) + "versions/" + req.initialVersion() + "/manifest.json";
         LatestPointer latest = new LatestPointer(req.projectId(), req.initialVersion(), manifestUrl);
 
-        // manifest.json (leer)
         String baseUrlForFiles = normalizeBaseUrl(req.baseUrl()) + "versions/" + req.initialVersion() + "/files/";
-        HostManifest manifest = new HostManifest(
-                req.projectId(),
-                req.name(),
-                req.mcVersion(),
-                req.loader(),
-                req.loaderVersion(),
-                req.initialVersion(),
-                Instant.now().toString(),
+
+        var loader = new ManifestModels.Loader(
+                req.loader().name().toLowerCase(),
+                req.loader() == LoaderType.VANILLA ? "" : req.loaderVersion().trim()
+        );
+
+        int packVersion = 1;
+
+        var manifest = new ManifestModels.Manifest(
+                req.projectId(),      // packId
+                req.name(),           // packName
+                packVersion,          // int
+                req.mcVersion(),      // minecraftVersion
+                loader,
                 baseUrlForFiles,
-                new ArrayList<>()
+                new ArrayList<>(),    // files
+                null,                 // overrides
+                java.time.Instant.now().toString() //generatedAt
         );
 
         Path latestPath = projectRoot.resolve("latest.json");
@@ -70,6 +91,7 @@ public class HostProjectCreator {
 
         writeJsonAtomic(latestPath, latest);
         writeJsonAtomic(manifestPath, manifest);
+
 
         return new HostProjectPaths(projectRoot, latestPath, manifestPath, filesDir);
     }

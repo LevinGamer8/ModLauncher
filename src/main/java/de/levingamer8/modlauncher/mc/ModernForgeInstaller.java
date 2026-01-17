@@ -28,7 +28,7 @@ public final class ModernForgeInstaller {
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
     /**
-     * Installiert Forge (1.13+) stabil über den offiziellen Forge-Installer in einer Fake-.minecraft
+     * Installiert Forge (1.13+) stabil über den offiziellen Forge-Installer in einer Fake-.minecraftVersion
      * und kopiert danach:
      *  - versions/<forgeId> nach shared/versions/<targetId>
      *  - libraries/** nach shared/libraries/**
@@ -79,7 +79,7 @@ public final class ModernForgeInstaller {
 
         // Fake environment
         Path tempRoot = sharedCache.resolve(mcVersion + "-" + forgeVersion);
-        Path tempMc = tempRoot.resolve(".minecraft");
+        Path tempMc = tempRoot.resolve(".minecraftVersion");
         Path tempVersions = tempMc.resolve("versions");
         Path tempLibraries = tempMc.resolve("libraries");
 
@@ -101,7 +101,7 @@ public final class ModernForgeInstaller {
         Path javaExe = JavaRuntimeManager.ensureJava(mcVersion, L);
 
         // Installer ausführen
-        L.accept("[FORGE] Running installer in temp .minecraft: " + tempMc);
+        L.accept("[FORGE] Running installer in temp .minecraftVersion: " + tempMc);
         int exit = runForgeInstaller(javaExe, installerJar, tempMc, L);
         if (exit != 0) {
             throw new RuntimeException("Forge installer failed exit=" + exit + " (MC=" + mcVersion + ", Forge=" + forgeVersion + ")");

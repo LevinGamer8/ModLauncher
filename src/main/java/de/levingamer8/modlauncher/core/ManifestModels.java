@@ -1,19 +1,24 @@
 package de.levingamer8.modlauncher.core;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.util.List;
 
 public class ManifestModels {
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public record Manifest(
             String packId,
             String packName,
             int packVersion,
-            String minecraft,
+            String minecraftVersion,
             Loader loader,
             String baseUrl,
             List<ManifestFile> files,
-            Overrides overrides
+            Overrides overrides,
+            String generatedAt
     ) {}
+
 
     public record Loader(String type, String version) {}
 
@@ -27,8 +32,6 @@ public class ManifestModels {
             Download download
     ) {}
 
-    public record Download(
-            String type,          // url
-            String url
-    ) {}
+    public record Download(String url) {}
+
 }

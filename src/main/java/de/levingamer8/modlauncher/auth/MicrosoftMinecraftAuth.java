@@ -111,7 +111,7 @@ public final class MicrosoftMinecraftAuth {
     }
 
     /**
-     * Kompletter Login: Device Code anzeigen lassen -> token -> xbox live -> xsts -> minecraft token -> profile
+     * Kompletter Login: Device Code anzeigen lassen -> token -> xbox live -> xsts -> minecraftVersion token -> profile
      */
     public MinecraftSession loginWithDeviceCode(DeviceCode code) throws IOException, InterruptedException {
         JsonObject msToken = waitForMicrosoftToken(code);

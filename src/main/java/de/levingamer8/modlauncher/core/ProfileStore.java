@@ -55,7 +55,7 @@ public class ProfileStore {
         return instanceDir(profileName).resolve("runtime");
     }
 
-    /** Backwards compat: früher war das "minecraft root". Jetzt ist es gameDir. */
+    /** Backwards compat: früher war das "minecraftVersion root". Jetzt ist es gameDir. */
     public Path minecraftDir(String profileName) {
         return instanceGameDir(profileName);
     }

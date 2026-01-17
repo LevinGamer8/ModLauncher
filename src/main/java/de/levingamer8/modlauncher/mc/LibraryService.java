@@ -69,11 +69,11 @@ public final class LibraryService {
                     String name = lib.has("name") ? lib.get("name").getAsString() : "";
                     String group = name.contains(":") ? name.substring(0, name.indexOf(':')) : "";
 
-                    // Heuristik: Forge-Ökosystem + MCP + net.minecraft (srg/extra) -> Forge Maven
+                    // Heuristik: Forge-Ökosystem + MCP + net.minecraftVersion (srg/extra) -> Forge Maven
                     if (group.startsWith("net.minecraftforge")
                             || group.startsWith("cpw.mods")
                             || group.startsWith("de.oceanlabs.mcp")
-                            || group.startsWith("net.minecraft")) {
+                            || group.startsWith("net.minecraftVersion")) {
                         baseUrl = "https://maven.minecraftforge.net/";
                     } else {
                         baseUrl = "https://libraries.minecraft.net/";

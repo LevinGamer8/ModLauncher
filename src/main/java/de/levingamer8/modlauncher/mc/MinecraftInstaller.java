@@ -40,7 +40,7 @@ public final class MinecraftInstaller {
                 .withProgressCallback(progress)
                 .build();
 
-        // gameDir von FlowUpdater = .minecraft root -> bei uns sharedRoot
+        // gameDir von FlowUpdater = .minecraftVersion root -> bei uns sharedRoot
         updater.update(sharedRoot);
         log.accept("[INSTALL] Vanilla ok.");
     }
