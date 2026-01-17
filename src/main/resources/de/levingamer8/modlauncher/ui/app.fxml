@@ -36,9 +36,9 @@
                         text="Main-Ordner öffnen"
                         onAction="#onOpenMainFolder"
                         styleClass="ghost actionButton"/>
-                <Button fx:id="hostProjectButton"
-                        text="Projekt hosten"
-                        onAction="#onProjectHost"
+                <Button fx:id="hostModeButton"
+                        text="Host-Mode"
+                        onAction="#onHostMode"
                         styleClass="ghost actionButton"/>
             </HBox>
 

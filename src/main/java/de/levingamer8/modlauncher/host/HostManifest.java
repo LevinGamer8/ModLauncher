@@ -1,36 +1,17 @@
 package de.levingamer8.modlauncher.host;
 
-import java.util.ArrayList;
+import de.levingamer8.modlauncher.core.LoaderType;
+
 import java.util.List;
 
-public class HostManifest {
-    public int schemaVersion = 1;
-
-    public String projectId;
-    public String name;
-    public String version;
-
-    public Minecraft minecraft = new Minecraft();
-    public String filesBaseUrl;     // wo Clients später downloaden
-    public String overridesUrl;     // filesBaseUrl abgeleitet oder extra
-
-    public List<FileEntry> files = new ArrayList<>();
-    public Overrides overrides = new Overrides();
-
-    public static class Minecraft {
-        public String version;
-        public String loader;
-        public String loaderVersion;
-    }
-
-    public static class FileEntry {
-        public String path;   // relativ innerhalb files/
-        public String sha256;
-        public long size;
-    }
-
-    public static class Overrides {
-        public String sha256;
-        public long size;
-    }
-}
+public record HostManifest(
+        String projectId,
+        String name,
+        String mcVersion,
+        LoaderType loader,
+        String loaderVersion,   // <- das fehlte
+        String version,
+        String generatedAt,     // ISO-8601 String (einfach & kompatibel)
+        String baseUrl,         // .../versions/<ver>/files/
+        List<ManifestFileEntry> files
+) {}

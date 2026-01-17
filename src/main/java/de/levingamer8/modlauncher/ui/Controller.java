@@ -6,10 +6,11 @@ import de.levingamer8.modlauncher.core.PackUpdater;
 import de.levingamer8.modlauncher.core.ProfileStore;
 import de.levingamer8.modlauncher.core.ProfileStore.Profile;
 import de.levingamer8.modlauncher.core.LoaderType;
-import de.levingamer8.modlauncher.host.HostManifest;
-import de.levingamer8.modlauncher.host.ProjectHostService;
-import de.levingamer8.modlauncher.mc.FabricVersionResolver;
-import de.levingamer8.modlauncher.mc.ForgeVersionResolver;
+import de.levingamer8.modlauncher.host.CreateHostProjectRequest;
+import de.levingamer8.modlauncher.host.HostProjectCreator;
+import de.levingamer8.modlauncher.host.modrinth.ModrinthClient;
+import de.levingamer8.modlauncher.host.modrinth.SearchHit;
+import de.levingamer8.modlauncher.host.modrinth.Version;
 import de.levingamer8.modlauncher.mc.MinecraftLauncherService;
 
 import de.levingamer8.modlauncher.auth.MicrosoftSessionStore;
@@ -32,10 +33,9 @@ import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
-import javafx.scene.layout.ColumnConstraints;
-import javafx.scene.layout.GridPane;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.*;
+import javafx.stage.DirectoryChooser;
+import javafx.stage.Modality;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
 
@@ -49,10 +49,9 @@ import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 
 
-
-
+import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.awt.*;
+import java.awt.Desktop;
 
 public class Controller {
 
@@ -94,7 +93,10 @@ public class Controller {
     private UpdateController launcherUpdater;
     private Dialog<Void> loginDialog;   // aktuell geöffneter Device-Code Dialog (wenn vorhanden)
 
-
+    private final java.util.concurrent.ConcurrentHashMap<String, javafx.scene.image.Image> iconCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.net.http.HttpClient iconHttp = java.net.http.HttpClient.newBuilder()
+            .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+            .build();
 
 
     @FXML
@@ -956,345 +958,398 @@ public class Controller {
     }
 
 
-    private static class HostDialogResult {
-        String projectId, name, version;
-        String mcVersion, loader, loaderVersion;
-        String filesBaseUrl;
-        String uploadUrl;
-        String bearerToken;
-        boolean doUpload;
-
-        ProjectHostService.Selection selection;
-    }
-
-    private HostDialogResult showHostDialog(Profile p) {
-        Dialog<HostDialogResult> d = new Dialog<>();
+    @FXML
+    public void onHostMode() {
+        // Dialog
+        Dialog<CreateHostProjectRequest> d = new Dialog<>();
         d.setTitle("Projekt hosten");
-        d.setHeaderText("Wähle, was aus der Instanz hochgeladen werden soll.");
+        d.setHeaderText(null);
 
-        ButtonType ok = new ButtonType("Build", ButtonBar.ButtonData.OK_DONE);
-        ButtonType buildUpload = new ButtonType("Build + Upload", ButtonBar.ButtonData.APPLY);
-        d.getDialogPane().getButtonTypes().addAll(ok, buildUpload, ButtonType.CANCEL);
+        ButtonType createBtn = new ButtonType("Erstellen", ButtonBar.ButtonData.OK_DONE);
+        d.getDialogPane().getButtonTypes().addAll(createBtn, ButtonType.CANCEL);
 
         GridPane gp = new GridPane();
-        gp.setHgap(10); gp.setVgap(10); gp.setPadding(new Insets(12));
+        gp.setHgap(10);
+        gp.setVgap(10);
+        gp.setPadding(new javafx.geometry.Insets(12));
 
-        TextField projectId = new TextField(p.name().toLowerCase().replace(" ", "-"));
-        TextField name = new TextField(p.name());
-        TextField version = new TextField("1.0.0");
-
+        TextField projectId = new TextField("testpack");
+        TextField name = new TextField("Test Pack");
         TextField mcVersion = new TextField("1.20.1");
 
-        // Loader als Auswahl, damit es keine Tippfehler gibt
-        ComboBox<String> loader = new ComboBox<>();
-        loader.getItems().setAll("fabric", "forge");
-        loader.getSelectionModel().select("fabric");
+        ComboBox<de.levingamer8.modlauncher.core.LoaderType> loader = new ComboBox<>();
+        loader.getItems().setAll(de.levingamer8.modlauncher.core.LoaderType.values());
+        loader.getSelectionModel().select(de.levingamer8.modlauncher.core.LoaderType.FABRIC);
 
-        TextField loaderVersion = new TextField("");
+        TextField loaderVersion = new TextField("0.15.11");
+        TextField baseUrl = new TextField("https://mc.local/testpack/");
+        TextField initialVersion = new TextField("1.0.0");
 
-        TextField filesBaseUrl = new TextField("https://server.tld/projects/" + projectId.getText() + "/files/");
-        TextField uploadUrl = new TextField("https://server.tld/api/upload");
-        PasswordField token = new PasswordField();
-
-        CheckBox cbMods = new CheckBox("mods/ (files)"); cbMods.setSelected(true);
-        CheckBox cbConfig = new CheckBox("config/ (overrides)"); cbConfig.setSelected(true);
-        CheckBox cbServersDat = new CheckBox("servers.dat (overrides)"); cbServersDat.setSelected(false);
-        CheckBox cbOptions = new CheckBox("options.txt (overrides)"); cbOptions.setSelected(false);
-        CheckBox cbKubejs = new CheckBox("kubejs/ (overrides)"); cbKubejs.setSelected(false);
-        CheckBox cbDefaultConfigs = new CheckBox("defaultconfigs/ (overrides)"); cbDefaultConfigs.setSelected(false);
-        CheckBox cbShaderpacks = new CheckBox("shaderpacks/ (files)"); cbShaderpacks.setSelected(false);
-        CheckBox cbResourcepacks = new CheckBox("resourcepacks/ (files)"); cbResourcepacks.setSelected(false);
-
-
-
-
-
-        // nach dem Erstellen von mcVersionField, loaderBox, loaderVersionField:
-        wireLoaderAutoSuggest(mcVersion, loader, loaderVersion);
-
+        TextField outFolder = new TextField(
+                profileStore.baseDir().resolve("host-projects").toString()
+        );
+        Button browse = new Button("…");
+        browse.setOnAction(e -> {
+            DirectoryChooser ch = new DirectoryChooser();
+            ch.setTitle("Output Ordner wählen");
+            java.io.File sel = ch.showDialog(d.getDialogPane().getScene().getWindow());
+            if (sel != null) outFolder.setText(sel.getAbsolutePath());
+        });
 
         int r = 0;
         gp.addRow(r++, new Label("Project ID:"), projectId);
         gp.addRow(r++, new Label("Name:"), name);
-        gp.addRow(r++, new Label("Version:"), version);
-
         gp.addRow(r++, new Label("MC Version:"), mcVersion);
         gp.addRow(r++, new Label("Loader:"), loader);
         gp.addRow(r++, new Label("Loader Version:"), loaderVersion);
+        gp.addRow(r++, new Label("Base URL:"), baseUrl);
+        gp.addRow(r++, new Label("Initial Version:"), initialVersion);
 
-        gp.addRow(r++, new Label("filesBaseUrl:"), filesBaseUrl);
-        gp.addRow(r++, new Label("uploadUrl:"), uploadUrl);
-        gp.addRow(r++, new Label("Bearer Token:"), token);
-
-        VBox box = new VBox(6, cbMods, cbConfig, cbServersDat, cbOptions, cbKubejs, cbDefaultConfigs, cbShaderpacks, cbResourcepacks);
-        box.setPadding(new Insets(6,0,0,0));
-        gp.addRow(r++, new Label("Auswahl:"), box);
-
-        ColumnConstraints c1 = new ColumnConstraints(); c1.setMinWidth(120);
-        ColumnConstraints c2 = new ColumnConstraints(); c2.setHgrow(Priority.ALWAYS);
-        gp.getColumnConstraints().setAll(c1, c2);
+        HBox outRow = new HBox(8, outFolder, browse);
+        HBox.setHgrow(outFolder, Priority.ALWAYS);
+        gp.addRow(r++, new Label("Output Folder:"), outRow);
 
         d.getDialogPane().setContent(gp);
 
-        Node okBtn = d.getDialogPane().lookupButton(ok);
-        okBtn.disableProperty().bind(projectId.textProperty().isEmpty().or(filesBaseUrl.textProperty().isEmpty()));
-
-        d.setResultConverter(bt -> {
-            if (bt == ButtonType.CANCEL) return null;
-
-            HostDialogResult res = new HostDialogResult();
-            res.projectId = projectId.getText().trim();
-            res.name = name.getText().trim();
-            res.version = version.getText().trim();
-
-            res.mcVersion = mcVersion.getText().trim();
-            res.loader = loader.getValue() == null ? "" : loader.getValue().trim();
-            res.loaderVersion = loaderVersion.getText().trim();
-
-            res.filesBaseUrl = filesBaseUrl.getText().trim();
-            res.uploadUrl = uploadUrl.getText().trim();
-            res.bearerToken = token.getText();
-
-            res.doUpload = (bt == buildUpload);
-
-            res.selection = new ProjectHostService.Selection(
-                    cbMods.isSelected(),
-                    cbConfig.isSelected(),
-                    cbServersDat.isSelected(),
-                    cbOptions.isSelected(),
-                    cbKubejs.isSelected(),
-                    cbDefaultConfigs.isSelected(),
-                    cbShaderpacks.isSelected(),
-                    cbResourcepacks.isSelected()
-            );
-
-            return res;
+        // LoaderVersion nur bei VANILLA deaktivieren
+        loader.valueProperty().addListener((obs, o, n) -> {
+            boolean vanilla = (n == de.levingamer8.modlauncher.core.LoaderType.VANILLA);
+            loaderVersion.setDisable(vanilla);
+            if (vanilla) loaderVersion.setText("");
         });
 
-        return d.showAndWait().orElse(null);
+        Node createNode = d.getDialogPane().lookupButton(createBtn);
+        createNode.disableProperty().bind(
+                projectId.textProperty().isEmpty()
+                        .or(name.textProperty().isEmpty())
+                        .or(mcVersion.textProperty().isEmpty())
+                        .or(baseUrl.textProperty().isEmpty())
+                        .or(outFolder.textProperty().isEmpty())
+                        .or(initialVersion.textProperty().isEmpty())
+        );
+
+        d.setResultConverter(bt -> {
+            if (bt != createBtn) return null;
+            return new CreateHostProjectRequest(
+                    projectId.getText().trim().toLowerCase(),
+                    name.getText().trim(),
+                    mcVersion.getText().trim(),
+                    loader.getValue(),
+                    loaderVersion.getText().trim(),
+                    initialVersion.getText().trim(),
+                    baseUrl.getText().trim(),
+                    Path.of(outFolder.getText().trim())
+            );
+        });
+
+        var req = d.showAndWait().orElse(null);
+        if (req == null) return;
+
+        try {
+            var creator = new HostProjectCreator();
+            var paths = creator.create(req);
+            Path modsDir = paths.filesDir().resolve("mods");
+            openModrinthSearchAndAdd(req.mcVersion(), req.loader(), modsDir);
+
+            appendLog("[HOST] Projekt erstellt: " + paths.projectRoot());
+            appendLog("[HOST] latest: " + paths.latestJson());
+            appendLog("[HOST] manifest: " + paths.manifestJson());
+
+            // Ordner öffnen
+            if (Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(paths.projectRoot().toFile());
+            }
+        } catch (Exception ex) {
+            showError("Host-Projekt konnte nicht erstellt werden:\n" + ex.getMessage());
+        }
     }
 
-    @FXML
-    public void onProjectHost() {
-
-        // 1) Instanz explizit auswählen
-        Profile p = pickInstanceToHost();
-        if (p == null) return;
-
-        Path instanceDir = profileStore.instanceDir(p.name());
-        if (!instanceDir.toFile().exists()) {
-            showError("Instanz existiert nicht: " + instanceDir);
+    public void openModrinthSearchAndAdd(
+            String mcVersion,
+            LoaderType loaderType,
+            Path modsDir
+    ) {
+        if (loaderType == LoaderType.VANILLA) {
+            showError("Modrinth Search: Vanilla hat keine Mods im Sinne von Forge/Fabric.");
             return;
         }
 
-        // 2) Host-Dialog
-        HostDialogResult cfg = showHostDialog(p);
-        if (cfg == null) return;
+        String modrinthLoader = LoaderType.toString(loaderType);
+        ModrinthClient api = new ModrinthClient();
 
-        setUiBusy(true);
-        progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
-        appendLog("[HOST] Start für Instanz: " + p.name());
+        Dialog<Void> dialog = new Dialog<>();
+        dialog.initModality(Modality.WINDOW_MODAL);
+        dialog.setTitle("Modrinth: Mods hinzufügen");
+        dialog.setHeaderText(null);
 
-        Task<Void> task = new Task<>() {
+        ButtonType closeBtn = new ButtonType("Schließen", ButtonBar.ButtonData.CANCEL_CLOSE);
+        dialog.getDialogPane().getButtonTypes().add(closeBtn);
+
+        // --- UI Controls ---
+        TextField query = new TextField();
+        query.setPromptText("Mod suchen (z.B. sodium, jei, iris...)");
+
+        Label ctx = new Label("MC: " + mcVersion + " | Loader: " + loaderType);
+
+        Button searchBtn = new Button("Suchen");
+        searchBtn.setDefaultButton(true);
+
+        ProgressIndicator progress = new ProgressIndicator();
+        progress.setVisible(false);
+        progress.setMaxSize(18, 18);
+
+        Label status = new Label();
+        status.setMinHeight(18);
+
+        ListView<SearchHit> list = new ListView<>();
+        list.setCellFactory(lv -> new ListCell<>() {
+            private String expectedIconUrl;
+
+            private final ImageView icon = new ImageView();
+            private final Label title = new Label();
+            private final Label meta  = new Label();
+            private final Label desc  = new Label();
+
+            private final VBox textBox = new VBox(2, title, meta, desc);
+            private final HBox row = new HBox(10, icon, textBox);
+
+            private final Separator sep = new Separator();
+            private final VBox root = new VBox(8, row, sep);
+
+            {
+                // icon
+                icon.setFitWidth(64);
+                icon.setFitHeight(64);
+                icon.setPreserveRatio(true);
+                icon.setSmooth(true);
+
+                // text styles (ohne CSS geht auch direkt)
+                title.setStyle("-fx-font-weight: bold; -fx-font-size: 13px;");
+                meta.setStyle("-fx-opacity: 0.75; -fx-font-size: 11px;");
+                desc.setStyle("-fx-opacity: 0.9; -fx-font-size: 12px;");
+                desc.setWrapText(true);
+
+                // layout
+                row.setFillHeight(true);
+                HBox.setHgrow(textBox, Priority.ALWAYS);
+
+                // damit WrapText wirklich funktioniert:
+                textBox.prefWidthProperty().bind(lv.widthProperty().subtract(70));
+
+                // Separator etwas dezenter
+                sep.setOpacity(0.35);
+                sep.setVisible(false);
+                sep.setManaged(false);
+
+                this.hoverProperty().addListener((obs, o, n) -> {
+                    root.setStyle(n
+                            ? "-fx-background-color: rgba(255,255,255,0.06); -fx-background-radius: 10;"
+                            : "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 10;");
+                });
+
+            }
+
             @Override
-            protected Void call() throws Exception {
-                updateMessage("Build...");
+            protected void updateItem(SearchHit item, boolean empty) {
+                super.updateItem(item, empty);
 
-                HostManifest m = new HostManifest();
-                m.projectId = cfg.projectId;
-                m.name = cfg.name;
-                m.version = cfg.version;
-                m.minecraft.version = cfg.mcVersion;
-                m.minecraft.loader = cfg.loader;
-                m.minecraft.loaderVersion = cfg.loaderVersion;
-
-                m.filesBaseUrl = cfg.filesBaseUrl;
-                m.overridesUrl = cfg.filesBaseUrl.replace("/files/", "/overrides.zip");
-
-                Path outDir = profileStore.baseDir().resolve("host_builds").resolve(cfg.projectId);
-
-                ProjectHostService.build(
-                        instanceDir,
-                        m,
-                        cfg.selection,
-                        outDir,
-                        (msg) -> appendLog(msg),
-                        (done, total) -> Platform.runLater(() -> {
-                            if (total <= 0) progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
-                            else progressBar.setProgress((double) done / (double) total);
-                        })
-                );
-
-                if (cfg.doUpload) {
-                    updateMessage("Upload...");
-                    Platform.runLater(() -> progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS));
-
-                    ProjectHostService.uploadPutPathQuery(
-                            cfg.uploadUrl,
-                            cfg.projectId,
-                            outDir,
-                            cfg.bearerToken,
-                            (msg) -> appendLog(msg),
-                            (done, total) -> Platform.runLater(() -> {
-                                if (total <= 0) progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
-                                else progressBar.setProgress((double) done / (double) total);
-                            })
-                    );
+                if (empty || item == null) {
+                    setGraphic(null);
+                    return;
                 }
 
-                updateMessage("Fertig");
-                return null;
-            }
-        };
+                title.setText(item.title());
 
-        statusLabel.textProperty().bind(task.messageProperty());
+                String author = (item.author() == null || item.author().isBlank()) ? "?" : item.author();
+                meta.setText(author + " • " + formatDownloads(item.downloads()) + " downloads • " + item.slug());
 
-        task.setOnSucceeded(e -> {
-            statusLabel.textProperty().unbind();
-            setStatus("Fertig", "pillOk");
-            appendLog("[HOST] Done.");
-            setUiBusy(false);
-            progressBar.setProgress(1);
-        });
+                desc.setText(item.description() == null ? "" : item.description());
 
-        task.setOnFailed(e -> {
-            statusLabel.textProperty().unbind();
-            setStatus("Fehler", "pillError");
-            Throwable ex = task.getException();
-            appendLog("[HOST] ERROR: " + (ex != null ? formatException(ex) : "unknown"));
-            setUiBusy(false);
-            progressBar.setProgress(0);
-            showError(ex != null ? ex.getMessage() : "Unbekannter Fehler");
-            if (ex != null) ex.printStackTrace();
-        });
-
-        Thread t = new Thread(task, "project-host");
-        t.setDaemon(true);
-        t.start();
-    }
+                expectedIconUrl = item.icon_url();
+                loadIconAsync(expectedIconUrl, icon, () -> expectedIconUrl);
 
 
-    private Profile pickInstanceToHost() {
-        var profiles = profileStore.loadProfiles();
-        if (profiles == null || profiles.isEmpty()) {
-            showError("Keine Instanzen/Profiles vorhanden.");
-            return null;
-        }
+                boolean isLast = (getIndex() == lv.getItems().size() - 1);
+                sep.setVisible(!isLast);
+                sep.setManaged(!isLast);
 
-        Dialog<Profile> d = new Dialog<>();
-        d.setTitle("Instanz auswählen");
-        d.setHeaderText("Welche Instanz möchtest du hosten?");
-
-        ButtonType ok = new ButtonType("Weiter", ButtonBar.ButtonData.OK_DONE);
-        d.getDialogPane().getButtonTypes().addAll(ok, ButtonType.CANCEL);
-
-        ComboBox<Profile> cb = new ComboBox<>();
-        cb.getItems().setAll(profiles);
-
-        // Anzeige Name
-        cb.setCellFactory(x -> new ListCell<>() {
-            @Override protected void updateItem(Profile item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty || item == null ? "" : item.name());
-            }
-        });
-        cb.setButtonCell(new ListCell<>() {
-            @Override protected void updateItem(Profile item, boolean empty) {
-                super.updateItem(item, empty);
-                setText(empty || item == null ? "" : item.name());
+                setGraphic(root);
             }
         });
 
-        // Vorauswahl: aktuell gewähltes Profil, sonst erstes
-        Profile current = profileCombo != null ? profileCombo.getValue() : null;
-        if (current != null) cb.getSelectionModel().select(current);
-        else cb.getSelectionModel().selectFirst();
-
-        VBox box = new VBox(10, new Label("Instanz:"), cb);
-        box.setPadding(new Insets(12));
-        d.getDialogPane().setContent(box);
-
-        Node okBtn = d.getDialogPane().lookupButton(ok);
-        okBtn.setDisable(cb.getValue() == null);
-        cb.valueProperty().addListener((o, a, b) -> okBtn.setDisable(b == null));
-
-        d.setResultConverter(bt -> bt == ok ? cb.getValue() : null);
-
-        return d.showAndWait().orElse(null);
-    }
 
 
-    private void wireLoaderAutoSuggest(
-            TextField mcVersionField,
-            ComboBox<String> loaderBox,
-            TextField loaderVersionField
-    ) {
-        // merkt sich, ob wir das Feld automatisch gesetzt haben
-        final boolean[] autoSet = { false };
+        Button addBtn = new Button("Add to Pack");
+        addBtn.setDisable(true);
 
-        Runnable trigger = () -> {
-            String l = loaderBox.getValue();
-            String mc = mcVersionField.getText() == null ? "" : mcVersionField.getText().trim();
-            if (l == null || mc.isEmpty()) return;
+        // enable add button when selection exists
+        list.getSelectionModel().selectedItemProperty().addListener((obs, o, n) -> addBtn.setDisable(n == null));
+        list.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) addBtn.fire();
+        });
 
-            // NICHT überschreiben, wenn User schon was eingetragen hat (und es nicht von uns kam)
-            String current = loaderVersionField.getText() == null ? "" : loaderVersionField.getText().trim();
-            if (!current.isEmpty() && !autoSet[0]) return;
 
-            Task<String> t = new Task<>() {
-                @Override protected String call() throws Exception {
-                    if ("forge".equalsIgnoreCase(l)) {
-                        return ForgeVersionResolver.resolveRecommendedOrLatest(mc);
-                    }
-                    if ("fabric".equalsIgnoreCase(l)) {
-                        return FabricVersionResolver.resolveLatestStable(mc);
-                    }
-                    return "";
+        // Layout
+        HBox top = new HBox(10, query, searchBtn, progress);
+        HBox.setHgrow(query, Priority.ALWAYS);
+
+        VBox root = new VBox(10,
+                ctx,
+                top,
+                list,
+                new HBox(10, addBtn),
+                status
+        );
+        root.setPadding(new Insets(8, 10, 8, 10));
+        root.setStyle("""
+             -fx-background-color: rgba(255,255,255,0.03);
+             -fx-background-radius: 10;
+        """);
+        VBox.setVgrow(list, Priority.ALWAYS);
+
+        dialog.getDialogPane().setContent(root);
+        dialog.getDialogPane().setPrefSize(720, 520);
+        dialog.setResizable(true);
+
+        // --- Actions ---
+        Runnable doSearch = () -> {
+            String q = query.getText() == null ? "" : query.getText().trim();
+            if (q.isEmpty()) {
+                status.setText("Bitte Suchbegriff eingeben.");
+                return;
+            }
+
+            progress.setVisible(true);
+            searchBtn.setDisable(true);
+            addBtn.setDisable(true);
+            status.setText("Suche…");
+
+            Task<java.util.List<SearchHit>> t = new Task<>() {
+                @Override protected java.util.List<SearchHit> call() throws Exception {
+                    return api.searchModsPage(q, modrinthLoader, mcVersion, 50, 0).hits();
                 }
             };
 
-            t.setOnSucceeded(e -> {
-                String v = t.getValue();
-                if (v == null || v.isBlank()) {
-                    appendLog("[LOADER] Keine Version gefunden für " + l + " / MC " + mc);
-                    return;
-                }
-                loaderVersionField.setText(v);
-                autoSet[0] = true;
-                appendLog("[LOADER] Auto: " + l + " " + mc + " -> " + v);
+            t.setOnSucceeded(ev -> {
+                List<SearchHit> hits = t.getValue();
+                list.getItems().setAll(hits);
+                status.setText(hits.isEmpty() ? "Keine Treffer." : ("Treffer: " + hits.size()));
+                progress.setVisible(false);
+                searchBtn.setDisable(false);
             });
 
-            t.setOnFailed(e -> {
+            t.setOnFailed(ev -> {
                 Throwable ex = t.getException();
-                appendLog("[LOADER] Resolve failed: " + (ex != null ? ex.getMessage() : "unknown"));
+                progress.setVisible(false);
+                searchBtn.setDisable(false);
+                status.setText("Fehler bei Suche.");
+                showError("Modrinth Suche fehlgeschlagen:\n" + (ex == null ? "unknown" : ex.getMessage()));
             });
 
-            Thread th = new Thread(t, "loader-resolve");
+            Thread th = new Thread(t, "modrinth-search");
             th.setDaemon(true);
             th.start();
         };
 
-        // Wenn User manuell tippt, ist es nicht mehr "auto"
-        loaderVersionField.textProperty().addListener((obs, o, n) -> {
-            if (n == null) return;
-            // wenn User ändert (nicht via setText aus trigger) kannst du schwer erkennen,
-            // aber pragmatisch: sobald er fokussiert ist und tippt -> autoSet=false
-            // -> das machen wir über focus listener:
+        searchBtn.setOnAction(e -> doSearch.run());
+        query.setOnAction(e -> doSearch.run()); // Enter in TextField
+
+        addBtn.setOnAction(e -> {
+            SearchHit sel = list.getSelectionModel().getSelectedItem();
+            if (sel == null) return;
+
+            progress.setVisible(true);
+            searchBtn.setDisable(true);
+            addBtn.setDisable(true);
+            status.setText("Downloade & füge hinzu: " + sel.title());
+
+            Task<Path> t = new Task<>() {
+                @Override protected Path call() throws Exception {
+                    // best compatible version for loader+mc
+                    Version v = api.getBestVersion(sel.project_id(), modrinthLoader, mcVersion);
+                    // download jar into mods folder
+                    return api.downloadPrimaryJar(v, modsDir);
+                }
+            };
+
+            t.setOnSucceeded(ev -> {
+                Path jar = t.getValue();
+                progress.setVisible(false);
+                searchBtn.setDisable(false);
+                status.setText("Hinzugefügt: " + jar.getFileName());
+                appendLog("[HOST] Mod hinzugefügt: " + jar.getFileName() + " -> " + jar);
+
+                // optional: auto-refresh manifest later, not here
+            });
+
+            t.setOnFailed(ev -> {
+                Throwable ex = t.getException();
+                progress.setVisible(false);
+                searchBtn.setDisable(false);
+                status.setText("Fehler beim Download.");
+                showError("Mod hinzufügen fehlgeschlagen:\n" + (ex == null ? "unknown" : ex.getMessage()));
+            });
+
+            Thread th = new Thread(t, "modrinth-add");
+            th.setDaemon(true);
+            th.start();
         });
 
-        loaderVersionField.focusedProperty().addListener((obs, was, is) -> {
-            if (is) autoSet[0] = false; // User übernimmt Kontrolle
-        });
-
-        // Trigger bei Änderungen
-        mcVersionField.textProperty().addListener((o,a,b) -> trigger.run());
-        loaderBox.valueProperty().addListener((o,a,b) -> trigger.run());
-
-        // 1x initial
-        Platform.runLater(trigger);
+        // show dialog
+        dialog.showAndWait();
     }
 
+    private static String formatDownloads(long n) {
+        if (n < 1_000) return Long.toString(n);
+        double val;
+        String suffix;
+        if (n < 1_000_000) { val = n / 1_000.0; suffix = "K"; }
+        else if (n < 1_000_000_000) { val = n / 1_000_000.0; suffix = "M"; }
+        else { val = n / 1_000_000_000.0; suffix = "B"; }
 
+        String s = (val >= 10) ? String.format(java.util.Locale.US, "%.0f", val)
+                : String.format(java.util.Locale.US, "%.1f", val);
+        if (s.endsWith(".0")) s = s.substring(0, s.length() - 2);
+        return s + suffix;
+    }
 
+    private void loadIconAsync(String url, javafx.scene.image.ImageView target, java.util.function.Supplier<String> currentUrl) {
+        if (url == null || url.isBlank()) {
+            target.setImage(null);
+            return;
+        }
+
+        javafx.scene.image.Image cached = iconCache.get(url);
+        if (cached != null) {
+            target.setImage(cached);
+            return;
+        }
+
+        target.setImage(null);
+
+        javafx.concurrent.Task<javafx.scene.image.Image> t = new javafx.concurrent.Task<>() {
+            @Override protected javafx.scene.image.Image call() throws Exception {
+                var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
+                        .header("User-Agent", "ModLauncher/1.0 (host-mode)")
+                        .GET().build();
+                var res = iconHttp.send(req, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+                if (res.statusCode() != 200) return null;
+                return new javafx.scene.image.Image(new java.io.ByteArrayInputStream(res.body()));
+            }
+        };
+
+        t.setOnSucceeded(e -> {
+            var img = t.getValue();
+            if (img == null) return;
+            iconCache.put(url, img);
+            if (url.equals(currentUrl.get())) {
+                target.setImage(img);
+            }
+        });
+
+        Thread th = new Thread(t, "modrinth-icon");
+        th.setDaemon(true);
+        th.start();
+    }
 
 }
