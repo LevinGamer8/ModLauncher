@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: "maven"
     directory: "/"  # Root-Verzeichnis deines Projekts
     schedule:
-      interval: "weekly"  # Oder "daily", "monthly"
+      interval: "daily"  # Oder "daily", "monthly"
     commit-message:
       prefix: "deps"
     open-pull-requests-limit: 50
