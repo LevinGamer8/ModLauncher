@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.nio.file.Path;
 
 
+import de.levingamer8.modlauncher.mc.PlaytimeStore;
 import de.levingamer8.modlauncher.update.UpdateController;
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
@@ -95,6 +96,12 @@ public class Controller {
     private ImageView skinView;
     @FXML
     private Label accountNameLabel;
+    @FXML private Label instancePlaytimeLabel;
+    @FXML private Label globalPlaytimeLabel;
+
+    private PlaytimeStore globalPlaytimeStore;
+    private PlaytimeStore instancePlaytimeStore;
+
 
 
     private final ConcurrentLinkedQueue<String> logQueue = new ConcurrentLinkedQueue<>();
@@ -155,6 +162,14 @@ public class Controller {
 
         reloadProfilesAndSelect(null);
 
+        profileCombo.valueProperty().addListener((obs, oldV, newV) -> {
+            refreshProfileDependentUi();
+            refreshPlaytimeUi();
+        });
+
+        if (openFolderButton != null) {
+            openFolderButton.setDisable(profileCombo.getValue() == null);
+        }
         profileCombo.valueProperty().addListener((obs, oldV, newV) -> refreshProfileDependentUi());
 
         refreshProfileDependentUi();
@@ -211,6 +226,7 @@ public class Controller {
             );
         }
 
+        refreshPlaytimeUi();
     }
 
     @FXML
@@ -262,6 +278,7 @@ public class Controller {
         ButtonType saveBtn = new ButtonType("Speichern", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveBtn, ButtonType.CANCEL);
 
+        // Form
         GridPane gp = new GridPane();
         gp.setHgap(10);
         gp.setVgap(10);
@@ -601,6 +618,7 @@ public class Controller {
     }
 
     private void reloadProfilesAndSelect(String nameToSelectOrNull) {
+
         var all = profileStore.loadProfiles();
         profileCombo.getItems().setAll(all);
 
@@ -623,6 +641,8 @@ public class Controller {
             profileCombo.getSelectionModel().clearSelection();
             profileCombo.setValue(null);
         }
+        refreshPlaytimeUi();
+
 
         refreshProfileDependentUi();
     }
@@ -863,14 +883,7 @@ public class Controller {
 
 
 
-    private void refreshProfileDependentUi() {
-        boolean hasProfile = profileCombo != null && profileCombo.getValue() != null;
-        boolean loggedIn = isLoggedIn();
 
-        if (openFolderButton != null) openFolderButton.setDisable(uiBusy || !hasProfile);
-        if (updateButton != null) updateButton.setDisable(uiBusy || !hasProfile);
-        if (playButton != null) playButton.setDisable(uiBusy || !hasProfile || !loggedIn);
-    }
 
 
 
@@ -1711,6 +1724,36 @@ public class Controller {
         Thread th = new Thread(t, "modrinth-icon");
         th.setDaemon(true);
         th.start();
+    }
+    private void refreshPlaytimeUi() {
+        // global store initialisieren
+        if (globalPlaytimeStore == null) {
+            Path globalFile = profileStore.baseDir().resolve("playtime-global.properties");
+            globalPlaytimeStore = new PlaytimeStore(globalFile);
+        }
+
+        Profile p = (profileCombo != null) ? profileCombo.getValue() : null;
+
+        if (p == null) {
+            if (instancePlaytimeLabel != null) instancePlaytimeLabel.setText("-");
+            if (globalPlaytimeLabel != null) globalPlaytimeLabel.setText("Gesamt: " + globalPlaytimeStore.getTotalPretty());
+            return;
+        }
+
+        Path instFile = profileStore.instanceDir(p.name()).resolve("playtime.properties");
+        instancePlaytimeStore = new PlaytimeStore(instFile);
+
+        if (instancePlaytimeLabel != null) instancePlaytimeLabel.setText(instancePlaytimeStore.getTotalPretty());
+        if (globalPlaytimeLabel != null) globalPlaytimeLabel.setText("Gesamt: " + globalPlaytimeStore.getTotalPretty());
+    }
+
+    private void refreshProfileDependentUi() {
+        boolean hasProfile = profileCombo != null && profileCombo.getValue() != null;
+        boolean loggedIn = isLoggedIn();
+
+        if (openFolderButton != null) openFolderButton.setDisable(uiBusy || !hasProfile);
+        if (updateButton != null) updateButton.setDisable(uiBusy || !hasProfile);
+        if (playButton != null) playButton.setDisable(uiBusy || !hasProfile || !loggedIn);
     }
 
 }

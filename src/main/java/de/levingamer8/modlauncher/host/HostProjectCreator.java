@@ -83,7 +83,8 @@ public class HostProjectCreator {
                 baseUrlForFiles,
                 new ArrayList<>(),    // files
                 null,                 // overrides
-                java.time.Instant.now().toString() //generatedAt
+                java.time.Instant.now().toString(), //generatedAt
+                "" //TODO: Host Changelog-URL
         );
 
         Path latestPath = projectRoot.resolve("latest.json");
