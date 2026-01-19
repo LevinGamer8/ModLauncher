@@ -133,7 +133,7 @@
             <plugin>
                 <groupId>org.panteleyev</groupId>
                 <artifactId>jpackage-maven-plugin</artifactId>
-                <version>1.7.1</version>
+                <version>1.7.3</version>
                 <configuration>
                     <name>ModLauncher</name>
                     <appVersion>${project.version}</appVersion>
