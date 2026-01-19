@@ -18,7 +18,7 @@
             <VBox spacing="2">
                 <Label text="ModLauncher" styleClass="h1"/>
                 <HBox spacing="8" alignment="CENTER_LEFT">
-                    <Label text="made by LevinGamer8 and TanlinesGooner69" styleClass="mutedSmall"/>
+                    <Label text="made by LevinGamer8" styleClass="mutedSmall"/>
                     <Label fx:id="versionLabel" styleClass="version"/>
                 </HBox>
             </VBox>
@@ -124,7 +124,6 @@
                             <ComboBox fx:id="profileCombo" maxWidth="1.7976931348623157E308"/>
                             <!-- Instance selector + playtime -->
                             <HBox spacing="10" alignment="CENTER_LEFT">
-                                <ComboBox fx:id="profileCombo" HBox.hgrow="ALWAYS"/>
                                 <Label fx:id="instancePlaytimeLabel" text="0h 00m 00s" styleClass="mutedSmall"/>
                             </HBox>
 
