@@ -75,7 +75,8 @@ public class HostManifestGenerator {
                 manifest.baseUrl(),
                 files,
                 manifest.overrides(),
-                manifest.generatedAt()
+                manifest.generatedAt(),
+                manifest.changelogUrl()
         );
 
         writeJsonAtomic(manifestPath, updated);

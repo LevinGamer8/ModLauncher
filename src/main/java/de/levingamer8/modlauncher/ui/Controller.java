@@ -111,7 +111,12 @@ public class Controller {
     private MicrosoftSessionStore msStore;
 
     private UpdateController launcherUpdater;
-    private Dialog<Void> loginDialog;   // aktuell geöffneter Device-Code Dialog (wenn vorhanden)
+    private Dialog<Void> loginDialog;
+    private boolean uiBusy = false;
+
+    private record NewProfileData(String name, String manifestUrl) {}
+
+
 
     private final java.util.concurrent.ConcurrentHashMap<String, javafx.scene.image.Image> iconCache = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.net.http.HttpClient iconHttp = java.net.http.HttpClient.newBuilder()
@@ -150,14 +155,9 @@ public class Controller {
 
         reloadProfilesAndSelect(null);
 
-        profileCombo.valueProperty().addListener((obs, oldV, newV) -> {
-            if (openFolderButton != null) {
-                openFolderButton.setDisable(newV == null);
-            }
-        });
-        if (openFolderButton != null) {
-            openFolderButton.setDisable(profileCombo.getValue() == null);
-        }
+        profileCombo.valueProperty().addListener((obs, oldV, newV) -> refreshProfileDependentUi());
+
+        refreshProfileDependentUi();
 
 
         appendLog("Instanz-Basisordner: " + profileStore.baseDir());
@@ -262,7 +262,6 @@ public class Controller {
         ButtonType saveBtn = new ButtonType("Speichern", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveBtn, ButtonType.CANCEL);
 
-        // Form
         GridPane gp = new GridPane();
         gp.setHgap(10);
         gp.setVgap(10);
@@ -270,15 +269,29 @@ public class Controller {
 
         TextField name = new TextField(p.name());
         TextField url = new TextField(p.manifestUrl());
+
         TextField host = new TextField(p.serverHost() == null ? "" : p.serverHost());
         TextField port = new TextField(String.valueOf(p.serverPort()));
+
         ComboBox<ProfileStore.JoinMode> joinMode = new ComboBox<>();
         joinMode.getItems().setAll(ProfileStore.JoinMode.values());
         joinMode.getSelectionModel().select(p.joinMode() == null ? ProfileStore.JoinMode.SERVERS_DAT : p.joinMode());
 
+        // Test UI
+        Button testBtn = new Button("Testen");
+        ProgressIndicator pi = new ProgressIndicator();
+        pi.setVisible(false);
+        pi.setMaxSize(18, 18);
+
+        Label testStatus = new Label();
+        testStatus.setMinHeight(18);
+
+        HBox testRow = new HBox(10, testBtn, pi, testStatus);
+
         int r = 0;
         gp.addRow(r++, new Label("Name:"), name);
         gp.addRow(r++, new Label("Manifest URL:"), url);
+        gp.addRow(r++, new Label(""), testRow);
         gp.addRow(r++, new Label("Server Host:"), host);
         gp.addRow(r++, new Label("Server Port:"), port);
         gp.addRow(r++, new Label("Join Mode:"), joinMode);
@@ -291,11 +304,88 @@ public class Controller {
 
         dialog.getDialogPane().setContent(gp);
 
-        // simple validation
         Node saveNode = dialog.getDialogPane().lookupButton(saveBtn);
-        saveNode.disableProperty().bind(
-                name.textProperty().isEmpty().or(url.textProperty().isEmpty())
-        );
+        saveNode.setDisable(true);
+
+        // --- Helper: Test invalidieren, wenn Text geändert wird ---
+        Runnable invalidateTest = () -> {
+            testStatus.setText("Bitte testen.");
+            testStatus.setUserData(null); // null = nicht OK
+        };
+
+        Runnable updateSaveEnabled = () -> {
+            boolean nameOk = !name.getText().trim().isEmpty();
+            boolean urlOk = !url.getText().trim().isEmpty();
+            boolean testOk = "OK".equals(testStatus.getUserData());
+
+            // Port check (optional, aber sinnvoll)
+            boolean portOk = true;
+            try {
+                int v = Integer.parseInt(port.getText().trim());
+                portOk = (v >= 1 && v <= 65535);
+            } catch (Exception e) {
+                portOk = false;
+            }
+
+            saveNode.setDisable(!(nameOk && urlOk && portOk && testOk));
+        };
+
+        // initial: wir zwingen auch bei Edit einmal Test (sonst könnte alte URL tot sein)
+        invalidateTest.run();
+        updateSaveEnabled.run();
+
+        // Änderungen -> Test wieder ungültig
+        name.textProperty().addListener((obs, o, n) -> { invalidateTest.run(); updateSaveEnabled.run(); });
+        url.textProperty().addListener((obs, o, n) -> { invalidateTest.run(); updateSaveEnabled.run(); });
+        port.textProperty().addListener((obs, o, n) -> updateSaveEnabled.run());
+
+        // --- Test Button Aktion ---
+        testBtn.setOnAction(e -> {
+            String nm = name.getText().trim();
+            String u = url.getText().trim();
+
+            if (nm.isEmpty() || u.isEmpty()) {
+                testStatus.setText("Name und URL ausfüllen.");
+                testStatus.setUserData(null);
+                updateSaveEnabled.run();
+                return;
+            }
+
+            pi.setVisible(true);
+            testBtn.setDisable(true);
+            testStatus.setText("Teste…");
+            testStatus.setUserData(null);
+            updateSaveEnabled.run();
+
+            Task<Void> t = new Task<>() {
+                @Override protected Void call() throws Exception {
+                    // nutzt deine bestehende Methode inkl. latest.json Auflösung + JSON Parse
+                    fetchManifest(u);
+                    return null;
+                }
+            };
+
+            t.setOnSucceeded(ev -> {
+                pi.setVisible(false);
+                testBtn.setDisable(false);
+                testStatus.setText("OK ✅");
+                testStatus.setUserData("OK");
+                updateSaveEnabled.run();
+            });
+
+            t.setOnFailed(ev -> {
+                pi.setVisible(false);
+                testBtn.setDisable(false);
+                Throwable ex = t.getException();
+                testStatus.setText("Fehler: " + (ex == null ? "unknown" : ex.getMessage()));
+                testStatus.setUserData(null);
+                updateSaveEnabled.run();
+            });
+
+            Thread th = new Thread(t, "manifest-test-edit");
+            th.setDaemon(true);
+            th.start();
+        });
 
         dialog.setResultConverter(bt -> {
             if (bt != saveBtn) return null;
@@ -303,15 +393,13 @@ public class Controller {
             String newName = name.getText().trim();
             String newUrl = url.getText().trim();
             String newHost = host.getText().trim();
-            int newPort;
 
+            int newPort;
             try {
                 newPort = Integer.parseInt(port.getText().trim());
             } catch (Exception e) {
-                return null; // wird unten als "kein result" behandelt
+                return null;
             }
-
-            if (newName.isEmpty() || newUrl.isEmpty()) return null;
 
             return new ProfileStore.Profile(
                     newName,
@@ -325,14 +413,14 @@ public class Controller {
         var result = dialog.showAndWait().orElse(null);
         if (result == null) return;
 
-        // IMPORTANT: wenn Name geändert wurde, altes Profil löschen, sonst hast du beide
+        // Wenn Name geändert wurde, altes Profil löschen
         if (!p.name().equalsIgnoreCase(result.name())) {
             profileStore.deleteProfile(p.name());
         }
         profileStore.saveOrUpdateProfile(result);
-
         reloadProfilesAndSelect(result.name());
     }
+
 
 
     @FXML
@@ -364,21 +452,127 @@ public class Controller {
 
     @FXML
     private void onNewProfile() {
-        TextInputDialog d = new TextInputDialog();
-        d.setTitle("Neues Profil");
-        d.setHeaderText("Profilname eingeben");
-        d.setContentText("Name:");
+        Dialog<NewProfileData> d = new Dialog<>();
+        d.setTitle("Neue Instanz");
+        d.setHeaderText(null);
 
-        var nameOpt = d.showAndWait();
-        if (nameOpt.isEmpty()) return;
+        ButtonType createBtn = new ButtonType("Erstellen", ButtonBar.ButtonData.OK_DONE);
+        d.getDialogPane().getButtonTypes().addAll(createBtn, ButtonType.CANCEL);
 
-        String name = nameOpt.get().trim();
-        if (name.isEmpty()) return;
+        TextField nameField = new TextField();
+        nameField.setPromptText("Instanzname");
 
-        // Default-Werte
+        TextField urlField = new TextField();
+        urlField.setPromptText("Manifest-URL (oder latest.json)");
+
+        Label status = new Label();
+        status.setMinHeight(18);
+
+        ProgressIndicator pi = new ProgressIndicator();
+        pi.setVisible(false);
+        pi.setMaxSize(18, 18);
+
+        Button testBtn = new Button("Testen");
+        testBtn.setDefaultButton(false);
+
+        HBox testRow = new HBox(10, testBtn, pi, status);
+
+        VBox root = new VBox(10,
+                new Label("Name:"),
+                nameField,
+                new Label("Manifest URL:"),
+                urlField,
+                testRow
+        );
+        root.setPadding(new Insets(12));
+        d.getDialogPane().setContent(root);
+
+        Node createNode = d.getDialogPane().lookupButton(createBtn);
+        createNode.setDisable(true);
+
+        Runnable updateCreateEnabled = () -> {
+            boolean ok = !nameField.getText().trim().isEmpty()
+                    && !urlField.getText().trim().isEmpty()
+                    && "OK".equals(status.getUserData()); // wird beim erfolgreichen Test gesetzt
+            createNode.setDisable(!ok);
+        };
+
+        // Bei jeder Änderung: Button wieder sperren bis erneut getestet
+        Runnable invalidateTest = () -> {
+            status.setText("Bitte testen.");
+            status.setUserData(null);
+            updateCreateEnabled.run();
+        };
+
+        nameField.textProperty().addListener((o,a,b) -> invalidateTest.run());
+        urlField.textProperty().addListener((o,a,b) -> invalidateTest.run());
+
+        // Test-Button: URL checken
+        testBtn.setOnAction(ev -> {
+            String name = nameField.getText().trim();
+            String url = urlField.getText().trim();
+
+            if (name.isEmpty() || url.isEmpty()) {
+                status.setText("Name und URL ausfüllen.");
+                status.setUserData(null);
+                updateCreateEnabled.run();
+                return;
+            }
+
+            pi.setVisible(true);
+            testBtn.setDisable(true);
+            status.setText("Teste…");
+            status.setUserData(null);
+            updateCreateEnabled.run();
+
+            Task<Void> t = new Task<>() {
+                @Override protected Void call() throws Exception {
+                    var m = fetchManifest(url);
+                    if (m.minecraftVersion() == null || m.minecraftVersion().isBlank())
+                        throw new IllegalStateException("minecraftVersion fehlt im Manifest");
+                    if (m.loader() == null || m.loader().type() == null || m.loader().type().isBlank())
+                        throw new IllegalStateException("loader.type fehlt im Manifest");
+                    return null;
+                }
+            };
+
+            t.setOnSucceeded(e2 -> {
+                pi.setVisible(false);
+                testBtn.setDisable(false);
+                status.setText("OK ✅");
+                status.setUserData("OK");
+                updateCreateEnabled.run();
+            });
+
+            t.setOnFailed(e2 -> {
+                pi.setVisible(false);
+                testBtn.setDisable(false);
+                Throwable ex = t.getException();
+                status.setText("Fehler: " + (ex == null ? "unknown" : ex.getMessage()));
+                status.setUserData(null);
+                updateCreateEnabled.run();
+            });
+
+            Thread th = new Thread(t, "manifest-test");
+            th.setDaemon(true);
+            th.start();
+        });
+
+        // initial
+        invalidateTest.run();
+
+        d.setResultConverter(bt -> {
+            if (bt != createBtn) return null;
+            return new NewProfileData(nameField.getText().trim(), urlField.getText().trim());
+        });
+
+        var res = d.showAndWait().orElse(null);
+        if (res == null) return;
+
+        // Speichern (Server/Port/JoinMode default)
         var p = new ProfileStore.Profile(
-                name,
-                "http://localhost:8080/pack/fabric-1.21.11/manifest.json",
+                res.name(),
+                res.manifestUrl(),
                 "",
                 25565,
                 ProfileStore.JoinMode.SERVERS_DAT
@@ -387,6 +581,7 @@ public class Controller {
         profileStore.saveOrUpdateProfile(p);
         reloadProfilesAndSelect(p.name());
     }
+
 
     @FXML
     private void onDeleteProfile() {
@@ -424,7 +619,12 @@ public class Controller {
 
         if (selected != null) {
             profileCombo.getSelectionModel().select(selected);
+        } else {
+            profileCombo.getSelectionModel().clearSelection();
+            profileCombo.setValue(null);
         }
+
+        refreshProfileDependentUi();
     }
 
 
@@ -469,7 +669,7 @@ public class Controller {
 
         task.setOnSucceeded(e -> {
             statusLabel.textProperty().unbind();
-            statusLabel.setText("Fertig");
+            statusLabel.setText("Bereit");
             appendLog("Update fertig.");
             setUiBusy(false);
             progressBar.setProgress(1);
@@ -529,6 +729,23 @@ public class Controller {
 
                 updateMessage("Manifest laden...");
                 ManifestModels.Manifest manifest = fetchManifest(finalP.manifestUrl());
+
+                String changelog = "Kein Changelog definiert.";
+
+                String clUrl = resolveUrl(finalP.manifestUrl(), manifest.changelogUrl());
+                if (!clUrl.isBlank()) {
+                    try {
+                        changelog = loadTextFromUrl(clUrl);
+                    } catch (Exception ex) {
+                        changelog = "Changelog konnte nicht geladen werden:\n" + ex.getMessage() + "\nURL: " + clUrl;
+                    }
+                }
+
+                final String finalChangelog = changelog;
+                Platform.runLater(() -> {
+                    if (changelogArea != null) changelogArea.setText(finalChangelog);
+                });
+
 
                 LoaderType loaderType = LoaderType.fromString(
                         manifest.loader() != null ? manifest.loader().type() : "vanilla"
@@ -629,31 +846,33 @@ public class Controller {
     }
 
     private void setUiBusy(boolean busy) {
-        // Buttons, die während Busy wirklich gesperrt werden sollen
-        Node[] nodes = {
-                updateButton,
-                playButton,
-                loginButton,
-                profileCombo,
-                launcherUpdateButton
-        };
+        this.uiBusy = busy;
 
+        Node[] nodes = { loginButton, profileCombo, launcherUpdateButton };
         for (Node n : nodes) if (n != null) n.setDisable(busy);
 
-        // Diese zwei sollen nicht immer disabled werden:
-        // - openMainFolderButton (immer)
-        // - openFolderButton (wenn Profil vorhanden)
-        if (openFolderButton != null) {
-            openFolderButton.setDisable(profileCombo == null || profileCombo.getValue() == null);
-        }
-
         progressBar.setVisible(busy);
-        if (!busy) {
-            progressBar.setProgress(0);
-        } else {
-            setStatus(statusLabel.getText() == null || statusLabel.getText().isBlank() ? "Loading..." : statusLabel.getText(), "pillBusy");
-        }
+        if (!busy) progressBar.setProgress(0);
+        else setStatus(
+                statusLabel.getText() == null || statusLabel.getText().isBlank() ? "Loading..." : statusLabel.getText(),
+                "pillBusy"
+        );
+
+        refreshProfileDependentUi();
     }
+
+
+
+    private void refreshProfileDependentUi() {
+        boolean hasProfile = profileCombo != null && profileCombo.getValue() != null;
+        boolean loggedIn = isLoggedIn();
+
+        if (openFolderButton != null) openFolderButton.setDisable(uiBusy || !hasProfile);
+        if (updateButton != null) updateButton.setDisable(uiBusy || !hasProfile);
+        if (playButton != null) playButton.setDisable(uiBusy || !hasProfile || !loggedIn);
+    }
+
+
 
 
     private void appendLog(String s) {
@@ -915,7 +1134,6 @@ public class Controller {
             if (loginButton != null) {
                 loginButton.setText(loggedIn ? "Logout" : "Login (Microsoft)");
             }
-            if (playButton != null) playButton.setDisable(!loggedIn);
 
         });
     }
@@ -1347,8 +1565,6 @@ public class Controller {
             th.start();
         });
 
-
-
         addBtn.setOnAction(e -> {
 
             SearchHit sel = list.getSelectionModel().getSelectedItem();
@@ -1416,6 +1632,33 @@ public class Controller {
 
         dialog.showAndWait();
     }
+
+
+    private String loadTextFromUrl(String url) throws Exception {
+        var client = java.net.http.HttpClient.newBuilder()
+                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
+                .build();
+
+        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
+                .GET()
+                .build();
+
+        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+        if (resp.statusCode() != 200) {
+            throw new RuntimeException("Changelog HTTP " + resp.statusCode());
+        }
+        return resp.body();
+    }
+
+    private static String resolveUrl(String base, String maybeRelative) {
+        if (maybeRelative == null) return "";
+        String s = maybeRelative.trim();
+        if (s.isEmpty()) return "";
+        if (s.startsWith("http://") || s.startsWith("https://")) return s;
+        return java.net.URI.create(base).resolve(s).toString();
+    }
+
+
 
     private static String formatDownloads(long n) {
         if (n < 1_000) return Long.toString(n);

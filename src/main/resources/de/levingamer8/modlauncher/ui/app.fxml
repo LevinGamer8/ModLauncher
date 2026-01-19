@@ -118,7 +118,7 @@
                             </HBox>
 
                             <!-- Instance selector -->
-                            <ComboBox fx:id="profileCombo"/>
+                            <ComboBox fx:id="profileCombo" maxWidth="1.7976931348623157E308"/>
 
                             <!-- Main instance actions -->
                             <HBox spacing="10">

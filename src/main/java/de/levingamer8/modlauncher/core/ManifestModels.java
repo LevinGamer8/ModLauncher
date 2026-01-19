@@ -16,8 +16,11 @@ public class ManifestModels {
             String baseUrl,
             List<ManifestFile> files,
             Overrides overrides,
-            String generatedAt
+            String generatedAt,
+            String changelogUrl   // <--- NEU
     ) {}
+
+
 
 
     public record Loader(String type, String version) {}
