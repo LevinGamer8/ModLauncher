@@ -54,7 +54,7 @@ public final class PlaytimeStore {
         }
     }
 
-    private synchronized void save() {
+    synchronized void save() {
         try {
             Files.createDirectories(file.getParent());
             try (OutputStream out = Files.newOutputStream(file, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {

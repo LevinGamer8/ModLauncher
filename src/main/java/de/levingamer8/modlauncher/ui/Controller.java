@@ -1,6 +1,7 @@
 package de.levingamer8.modlauncher.ui;
 
 import de.levingamer8.modlauncher.auth.MicrosoftMinecraftAuth;
+import de.levingamer8.modlauncher.auth.MicrosoftSessionStore;
 import de.levingamer8.modlauncher.core.ManifestModels;
 import de.levingamer8.modlauncher.core.PackUpdater;
 import de.levingamer8.modlauncher.core.ProfileStore;
@@ -14,12 +15,6 @@ import de.levingamer8.modlauncher.host.modrinth.ModrinthClient;
 import de.levingamer8.modlauncher.host.modrinth.SearchHit;
 import de.levingamer8.modlauncher.host.modrinth.Version;
 import de.levingamer8.modlauncher.mc.MinecraftLauncherService;
-
-import de.levingamer8.modlauncher.auth.MicrosoftSessionStore;
-import java.time.Instant;
-import java.nio.file.Path;
-
-
 import de.levingamer8.modlauncher.mc.PlaytimeStore;
 import de.levingamer8.modlauncher.update.UpdateController;
 import javafx.animation.Animation;
@@ -29,87 +24,61 @@ import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.geometry.Insets;
 import javafx.scene.Node;
 import javafx.scene.control.*;
-import javafx.scene.control.Button;
-import javafx.scene.control.Dialog;
-import javafx.scene.control.Label;
-import javafx.scene.control.TextArea;
-import javafx.scene.control.TextField;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.input.Clipboard;
+import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.*;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Modality;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
 
-import javafx.geometry.Insets;
-import javafx.scene.control.SplitPane;
-import javafx.scene.control.TitledPane;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
-
-import javafx.scene.input.Clipboard;
-import javafx.scene.input.ClipboardContent;
-
-
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.awt.Desktop;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.util.Locale;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class Controller {
 
-    @FXML
-    private ComboBox<Profile> profileCombo;
+    @FXML private ComboBox<Profile> profileCombo;
 
-    @FXML
-    private Button updateButton;
-    @FXML
-    private Button openFolderButton;
-    @FXML
-    private ProgressBar progressBar;
-    @FXML
-    private TextArea logArea;
-    @FXML
-    private Label statusLabel;
-    @FXML
-    private Button playButton;
-    @FXML
-    private Label loginStatusLabel;
-    @FXML
-    private Button loginButton;
-    @FXML
-    private Button launcherUpdateButton;
-    @FXML
-    private Label versionLabel;
-    @FXML
-    private TextArea changelogArea;
-    @FXML
-    private Label serverStatusLabel;
-    @FXML
-    private Label serverDetailsLabel;
-    @FXML
-    private Label packInfoLabel;
-    @FXML
-    private SplitPane mainSplit;
-    @FXML
-    private TitledPane logPane;
-    @FXML
-    private ImageView skinView;
-    @FXML
-    private Label accountNameLabel;
+    @FXML private Button updateButton;
+    @FXML private Button openFolderButton;
+    @FXML private ProgressBar progressBar;
+    @FXML private TextArea logArea;
+    @FXML private Label statusLabel;
+    @FXML private Button playButton;
+    @FXML private Label loginStatusLabel;
+    @FXML private Button loginButton;
+    @FXML private Button launcherUpdateButton;
+    @FXML private Label versionLabel;
+    @FXML private TextArea changelogArea;
+    @FXML private Label serverStatusLabel;
+    @FXML private Label serverDetailsLabel;
+    @FXML private Label packInfoLabel;
+    @FXML private SplitPane mainSplit;
+    @FXML private TitledPane logPane;
+    @FXML private ImageView skinView;
+    @FXML private Label accountNameLabel;
+
+    // Playtime Labels (FXML muss fx:id="instancePlaytimeLabel" und fx:id="globalPlaytimeLabel" haben)
     @FXML private Label instancePlaytimeLabel;
     @FXML private Label globalPlaytimeLabel;
 
     private PlaytimeStore globalPlaytimeStore;
     private PlaytimeStore instancePlaytimeStore;
 
-
-
     private final ConcurrentLinkedQueue<String> logQueue = new ConcurrentLinkedQueue<>();
     private Timeline logFlushTimeline;
 
-    private static final int LOG_FLUSH_MAX_LINES = 500;     // pro Tick max Zeilen
-    private static final int LOG_MAX_CHARS = 300_000;       // TextArea Limit
-
+    private static final int LOG_FLUSH_MAX_LINES = 500;
+    private static final int LOG_MAX_CHARS = 300_000;
 
     private final ProfileStore profileStore = new ProfileStore();
     private final PackUpdater updater = new PackUpdater();
@@ -123,13 +92,10 @@ public class Controller {
 
     private record NewProfileData(String name, String manifestUrl) {}
 
-
-
-    private final java.util.concurrent.ConcurrentHashMap<String, javafx.scene.image.Image> iconCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentHashMap<String, Image> iconCache = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.net.http.HttpClient iconHttp = java.net.http.HttpClient.newBuilder()
             .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
             .build();
-
 
     @FXML
     public void initialize() {
@@ -149,15 +115,8 @@ public class Controller {
             }
         });
         profileCombo.setConverter(new StringConverter<>() {
-            @Override
-            public String toString(Profile p) {
-                return p == null ? "" : p.name();
-            }
-
-            @Override
-            public Profile fromString(String s) {
-                return null;
-            } // nicht editierbar -> egal
+            @Override public String toString(Profile p) { return p == null ? "" : p.name(); }
+            @Override public Profile fromString(String s) { return null; }
         });
 
         reloadProfilesAndSelect(null);
@@ -167,14 +126,6 @@ public class Controller {
             refreshPlaytimeUi();
         });
 
-        if (openFolderButton != null) {
-            openFolderButton.setDisable(profileCombo.getValue() == null);
-        }
-        profileCombo.valueProperty().addListener((obs, oldV, newV) -> refreshProfileDependentUi());
-
-        refreshProfileDependentUi();
-
-
         appendLog("Instanz-Basisordner: " + profileStore.baseDir());
         appendLog("Shared-Cache: " + profileStore.sharedRoot());
         startLogFlusher();
@@ -183,22 +134,16 @@ public class Controller {
         tryLoadSavedMicrosoftSession();
         updateAccountUi();
 
-
-        launcherUpdater = new UpdateController(
-                "LevinGamer8",
-                "ModLauncher"
-        );
+        launcherUpdater = new UpdateController("LevinGamer8", "ModLauncher");
 
         if (versionLabel != null) {
             versionLabel.setText("v" + detectVersion());
         }
 
-        // Auto-Check beim Start (nicht wenn dev version)
-        if (!versionLabel.getText().equals("vdev")) {
+        if (versionLabel != null && !versionLabel.getText().equals("vdev")) {
             Platform.runLater(() -> launcherUpdater.checkForUpdates(false));
         }
 
-        // Default-Status optisch korrekt
         setStatus("Bereit", "pillOk");
 
         if (changelogArea != null) changelogArea.setText("- Noch kein Changelog geladen.\n");
@@ -206,26 +151,21 @@ public class Controller {
         if (serverDetailsLabel != null) serverDetailsLabel.setText("Noch kein Check implementiert.");
         if (packInfoLabel != null) packInfoLabel.setText("Manifest laden -> dann hier Infos anzeigen.");
 
-
         if (logArea != null) logArea.setEditable(false);
 
         if (mainSplit != null && logPane != null) {
-
             Runnable apply = () -> {
-                if (logPane.isExpanded()) {
-                    mainSplit.setDividerPositions(0.60);
-                } else {
-                    mainSplit.setDividerPositions(0.97);
-                }
+                if (logPane.isExpanded()) mainSplit.setDividerPositions(0.60);
+                else mainSplit.setDividerPositions(0.97);
             };
 
             Platform.runLater(() -> Platform.runLater(apply));
-
             logPane.expandedProperty().addListener((obs, oldV, expanded) ->
                     Platform.runLater(() -> Platform.runLater(apply))
             );
         }
 
+        refreshProfileDependentUi();
         refreshPlaytimeUi();
     }
 
@@ -234,6 +174,36 @@ public class Controller {
         launcherUpdater.checkForUpdates(true);
     }
 
+    // -------------------- Playtime UI (FIXED PATHS) --------------------
+
+    /**
+     * Liest Playtime aus denselben Dateien, die MinecraftLauncherService schreibt:
+     * - Instanz: instanceRuntimeDir/playtime.properties
+     * - Global:  sharedRoot/playtime_total.properties
+     */
+    private void refreshPlaytimeUi() {
+        Platform.runLater(() -> {
+            Path globalFile = profileStore.sharedRoot().resolve("playtime_total.properties");
+            globalPlaytimeStore = new PlaytimeStore(globalFile);
+
+            Profile p = (profileCombo != null) ? profileCombo.getValue() : null;
+
+            if (p == null) {
+                if (instancePlaytimeLabel != null) instancePlaytimeLabel.setText("-");
+                if (globalPlaytimeLabel != null) globalPlaytimeLabel.setText("Gesamt: " + globalPlaytimeStore.getTotalPretty());
+                return;
+            }
+
+            Path instFile = profileStore.instanceRuntimeDir(p.name()).resolve("playtime.properties");
+            instancePlaytimeStore = new PlaytimeStore(instFile);
+
+            if (instancePlaytimeLabel != null) instancePlaytimeLabel.setText(instancePlaytimeStore.getTotalPretty());
+            if (globalPlaytimeLabel != null) globalPlaytimeLabel.setText("Gesamt: " + globalPlaytimeStore.getTotalPretty());
+        });
+    }
+
+
+    // -------------------- Logging --------------------
 
     private void startLogFlusher() {
         if (logFlushTimeline != null) return;
@@ -243,28 +213,62 @@ public class Controller {
         logFlushTimeline.play();
     }
 
-    private void tryLoadSavedMicrosoftSession() {
-        var s = msStore.loadOrNull();
-        if (s == null) {
-            setLoginStatus("Nicht eingeloggt");
-            return;
-        }
-
-        long now = Instant.now().getEpochSecond();
-        // 60s Puffer
-        if (s.expiresAtEpochSec() <= now + 60) {
-            msStore.clear();
-            setLoginStatus("Nicht eingeloggt (Session abgelaufen)");
-            appendLog("[LOGIN] gespeicherte Session abgelaufen -> gelöscht");
-            return;
-        }
-
-        mcSession = s;
-        updateAccountUi();
-        setLoginStatus("Eingeloggt als: " + mcSession.playerName());
-        appendLog("[LOGIN] Session geladen: " + mcSession.playerName());
+    private void appendLog(String s) {
+        if (s == null) return;
+        logQueue.add(s);
     }
 
+    private void clearLog() {
+        logQueue.clear();
+        if (logArea != null) logArea.clear();
+    }
+
+    private void flushLogQueue() {
+        if (logArea == null) return;
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < LOG_FLUSH_MAX_LINES; i++) {
+            String line = logQueue.poll();
+            if (line == null) break;
+            sb.append(line).append('\n');
+        }
+
+        if (sb.length() == 0) return;
+
+        logArea.appendText(sb.toString());
+
+        int len = logArea.getLength();
+        if (len > LOG_MAX_CHARS) {
+            logArea.deleteText(0, len - LOG_MAX_CHARS);
+        }
+    }
+
+    // -------------------- Profile CRUD --------------------
+
+    private void reloadProfilesAndSelect(String nameToSelectOrNull) {
+        var all = profileStore.loadProfiles();
+        profileCombo.getItems().setAll(all);
+
+        Profile selected = null;
+        if (nameToSelectOrNull != null) {
+            for (var p : all) {
+                if (p.name().equalsIgnoreCase(nameToSelectOrNull)) {
+                    selected = p;
+                    break;
+                }
+            }
+        }
+        if (selected == null && !all.isEmpty()) selected = all.getFirst();
+
+        if (selected != null) profileCombo.getSelectionModel().select(selected);
+        else {
+            profileCombo.getSelectionModel().clearSelection();
+            profileCombo.setValue(null);
+        }
+
+        refreshProfileDependentUi();
+        refreshPlaytimeUi();
+    }
 
     @FXML
     private void onEditProfile() {
@@ -278,7 +282,6 @@ public class Controller {
         ButtonType saveBtn = new ButtonType("Speichern", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(saveBtn, ButtonType.CANCEL);
 
-        // Form
         GridPane gp = new GridPane();
         gp.setHgap(10);
         gp.setVgap(10);
@@ -286,7 +289,6 @@ public class Controller {
 
         TextField name = new TextField(p.name());
         TextField url = new TextField(p.manifestUrl());
-
         TextField host = new TextField(p.serverHost() == null ? "" : p.serverHost());
         TextField port = new TextField(String.valueOf(p.serverPort()));
 
@@ -294,7 +296,6 @@ public class Controller {
         joinMode.getItems().setAll(ProfileStore.JoinMode.values());
         joinMode.getSelectionModel().select(p.joinMode() == null ? ProfileStore.JoinMode.SERVERS_DAT : p.joinMode());
 
-        // Test UI
         Button testBtn = new Button("Testen");
         ProgressIndicator pi = new ProgressIndicator();
         pi.setVisible(false);
@@ -302,7 +303,6 @@ public class Controller {
 
         Label testStatus = new Label();
         testStatus.setMinHeight(18);
-
         HBox testRow = new HBox(10, testBtn, pi, testStatus);
 
         int r = 0;
@@ -324,10 +324,9 @@ public class Controller {
         Node saveNode = dialog.getDialogPane().lookupButton(saveBtn);
         saveNode.setDisable(true);
 
-        // --- Helper: Test invalidieren, wenn Text geändert wird ---
         Runnable invalidateTest = () -> {
             testStatus.setText("Bitte testen.");
-            testStatus.setUserData(null); // null = nicht OK
+            testStatus.setUserData(null);
         };
 
         Runnable updateSaveEnabled = () -> {
@@ -335,8 +334,7 @@ public class Controller {
             boolean urlOk = !url.getText().trim().isEmpty();
             boolean testOk = "OK".equals(testStatus.getUserData());
 
-            // Port check (optional, aber sinnvoll)
-            boolean portOk = true;
+            boolean portOk;
             try {
                 int v = Integer.parseInt(port.getText().trim());
                 portOk = (v >= 1 && v <= 65535);
@@ -347,16 +345,13 @@ public class Controller {
             saveNode.setDisable(!(nameOk && urlOk && portOk && testOk));
         };
 
-        // initial: wir zwingen auch bei Edit einmal Test (sonst könnte alte URL tot sein)
         invalidateTest.run();
         updateSaveEnabled.run();
 
-        // Änderungen -> Test wieder ungültig
         name.textProperty().addListener((obs, o, n) -> { invalidateTest.run(); updateSaveEnabled.run(); });
         url.textProperty().addListener((obs, o, n) -> { invalidateTest.run(); updateSaveEnabled.run(); });
         port.textProperty().addListener((obs, o, n) -> updateSaveEnabled.run());
 
-        // --- Test Button Aktion ---
         testBtn.setOnAction(e -> {
             String nm = name.getText().trim();
             String u = url.getText().trim();
@@ -376,7 +371,6 @@ public class Controller {
 
             Task<Void> t = new Task<>() {
                 @Override protected Void call() throws Exception {
-                    // nutzt deine bestehende Methode inkl. latest.json Auflösung + JSON Parse
                     fetchManifest(u);
                     return null;
                 }
@@ -430,15 +424,12 @@ public class Controller {
         var result = dialog.showAndWait().orElse(null);
         if (result == null) return;
 
-        // Wenn Name geändert wurde, altes Profil löschen
         if (!p.name().equalsIgnoreCase(result.name())) {
             profileStore.deleteProfile(p.name());
         }
         profileStore.saveOrUpdateProfile(result);
         reloadProfilesAndSelect(result.name());
     }
-
-
 
     @FXML
     private void onDuplicateProfile() {
@@ -449,8 +440,8 @@ public class Controller {
         String newName = baseName;
         int i = 2;
 
-        // Name eindeutig machen
-        var existing = profileStore.loadProfiles().stream().map(ProfileStore.Profile::name).map(String::toLowerCase).toList();
+        var existing = profileStore.loadProfiles().stream().map(ProfileStore.Profile::name)
+                .map(String::toLowerCase).toList();
         while (existing.contains(newName.toLowerCase())) {
             newName = baseName + " " + (i++);
         }
@@ -490,8 +481,6 @@ public class Controller {
         pi.setMaxSize(18, 18);
 
         Button testBtn = new Button("Testen");
-        testBtn.setDefaultButton(false);
-
         HBox testRow = new HBox(10, testBtn, pi, status);
 
         VBox root = new VBox(10,
@@ -510,21 +499,19 @@ public class Controller {
         Runnable updateCreateEnabled = () -> {
             boolean ok = !nameField.getText().trim().isEmpty()
                     && !urlField.getText().trim().isEmpty()
-                    && "OK".equals(status.getUserData()); // wird beim erfolgreichen Test gesetzt
+                    && "OK".equals(status.getUserData());
             createNode.setDisable(!ok);
         };
 
-        // Bei jeder Änderung: Button wieder sperren bis erneut getestet
         Runnable invalidateTest = () -> {
             status.setText("Bitte testen.");
             status.setUserData(null);
             updateCreateEnabled.run();
         };
 
-        nameField.textProperty().addListener((o,a,b) -> invalidateTest.run());
-        urlField.textProperty().addListener((o,a,b) -> invalidateTest.run());
+        nameField.textProperty().addListener((o, a, b) -> invalidateTest.run());
+        urlField.textProperty().addListener((o, a, b) -> invalidateTest.run());
 
-        // Test-Button: URL checken
         testBtn.setOnAction(ev -> {
             String name = nameField.getText().trim();
             String url = urlField.getText().trim();
@@ -575,7 +562,6 @@ public class Controller {
             th.start();
         });
 
-        // initial
         invalidateTest.run();
 
         d.setResultConverter(bt -> {
@@ -586,7 +572,6 @@ public class Controller {
         var res = d.showAndWait().orElse(null);
         if (res == null) return;
 
-        // Speichern (Server/Port/JoinMode default)
         var p = new ProfileStore.Profile(
                 res.name(),
                 res.manifestUrl(),
@@ -598,7 +583,6 @@ public class Controller {
         profileStore.saveOrUpdateProfile(p);
         reloadProfilesAndSelect(p.name());
     }
-
 
     @FXML
     private void onDeleteProfile() {
@@ -617,36 +601,7 @@ public class Controller {
         reloadProfilesAndSelect(null);
     }
 
-    private void reloadProfilesAndSelect(String nameToSelectOrNull) {
-
-        var all = profileStore.loadProfiles();
-        profileCombo.getItems().setAll(all);
-
-        Profile selected = null;
-
-        if (nameToSelectOrNull != null) {
-            for (var p : all) {
-                if (p.name().equalsIgnoreCase(nameToSelectOrNull)) {
-                    selected = p;
-                    break;
-                }
-            }
-        }
-
-        if (selected == null && !all.isEmpty()) selected = all.getFirst();
-
-        if (selected != null) {
-            profileCombo.getSelectionModel().select(selected);
-        } else {
-            profileCombo.getSelectionModel().clearSelection();
-            profileCombo.setValue(null);
-        }
-        refreshPlaytimeUi();
-
-
-        refreshProfileDependentUi();
-    }
-
+    // -------------------- Update / Play --------------------
 
     @FXML
     public void onUpdate() {
@@ -713,14 +668,9 @@ public class Controller {
         t.start();
     }
 
-
     @FXML
     public void onPlay() {
-
-        if (!requireLoginOrPopup()) {
-            return;
-        }
-
+        if (!requireLoginOrPopup()) return;
 
         Profile p = profileCombo.getValue();
         if (p == null) {
@@ -728,30 +678,26 @@ public class Controller {
             return;
         }
 
-
         String manifestUrl = (p.manifestUrl() == null) ? "" : p.manifestUrl().trim();
         if (manifestUrl.isEmpty()) {
             showError("Dieses Profil hat keine Manifest URL. Bitte über 'Bearbeiten' setzen.");
             return;
         }
 
-        Profile finalP = p; // keine Feld-URL mehr
-
+        Profile finalP = p;
 
         setUiBusy(true);
         progressBar.setProgress(ProgressIndicator.INDETERMINATE_PROGRESS);
         appendLog("Play gestartet: Manifest laden, Loader installieren, dann starten...");
 
-
         Task<Void> task = new Task<>() {
             @Override
             protected Void call() throws Exception {
-
                 updateMessage("Manifest laden...");
                 ManifestModels.Manifest manifest = fetchManifest(finalP.manifestUrl());
 
+                // Changelog optional laden
                 String changelog = "Kein Changelog definiert.";
-
                 String clUrl = resolveUrl(finalP.manifestUrl(), manifest.changelogUrl());
                 if (!clUrl.isBlank()) {
                     try {
@@ -766,7 +712,6 @@ public class Controller {
                     if (changelogArea != null) changelogArea.setText(finalChangelog);
                 });
 
-
                 LoaderType loaderType = LoaderType.fromString(
                         manifest.loader() != null ? manifest.loader().type() : "vanilla"
                 );
@@ -777,7 +722,6 @@ public class Controller {
                 Path runtimeDir = profileStore.instanceRuntimeDir(finalP.name());
 
                 MinecraftLauncherService launcher = new MinecraftLauncherService();
-
 
                 MinecraftLauncherService.AuthSession auth = new MinecraftLauncherService.AuthSession(
                         mcSession.playerName(),
@@ -801,18 +745,36 @@ public class Controller {
                         msg -> appendLog(msg)
                 );
 
-                updateMessage("MC gestartet.");
+
+
+                Platform.runLater(() -> {
+                    setStatus("Beendet", "pillOk");
+
+                    // sofort
+                    refreshPlaytimeUi();
+
+                    // delayed (wichtig!)
+                    Timeline t = new Timeline(new KeyFrame(Duration.millis(400), ev -> refreshPlaytimeUi()));
+                    t.setCycleCount(1);
+                    t.play();
+                });
+
+                updateMessage("MC beendet.");
                 return null;
             }
+
+
+
         };
 
         statusLabel.textProperty().bind(task.messageProperty());
 
         task.setOnSucceeded(e -> {
             statusLabel.textProperty().unbind();
-            statusLabel.setText("Gestartet");
+            statusLabel.setText("Bereit");
             setUiBusy(false);
             progressBar.setProgress(1);
+            refreshPlaytimeUi();
         });
 
         task.setOnFailed(e -> {
@@ -824,27 +786,13 @@ public class Controller {
             progressBar.setProgress(0);
             if (ex != null) ex.printStackTrace();
             showError(ex != null ? ex.getMessage() : "Unbekannter Fehler");
+            refreshPlaytimeUi();
         });
 
         Thread t = new Thread(task, "mc-play");
         t.setDaemon(true);
         t.start();
     }
-
-    private static String formatException(Throwable t) {
-        if (t == null) return "unbekannt";
-        String msg = t.getMessage();
-        if (msg == null || msg.isBlank()) msg = t.getClass().getName();
-
-        Throwable c = t.getCause();
-        if (c != null) {
-            String cm = c.getMessage();
-            if (cm == null || cm.isBlank()) cm = c.getClass().getName();
-            msg += " | cause: " + cm;
-        }
-        return msg;
-    }
-
 
     @FXML
     public void onOpenFolder() {
@@ -865,125 +813,85 @@ public class Controller {
         }
     }
 
+    // -------------------- UI Busy / Enable states --------------------
+
     private void setUiBusy(boolean busy) {
         this.uiBusy = busy;
 
         Node[] nodes = { loginButton, profileCombo, launcherUpdateButton };
         for (Node n : nodes) if (n != null) n.setDisable(busy);
 
-        progressBar.setVisible(busy);
-        if (!busy) progressBar.setProgress(0);
-        else setStatus(
-                statusLabel.getText() == null || statusLabel.getText().isBlank() ? "Loading..." : statusLabel.getText(),
-                "pillBusy"
-        );
+        if (progressBar != null) {
+            progressBar.setVisible(busy);
+            if (!busy) progressBar.setProgress(0);
+        }
+
+        if (busy) {
+            setStatus(
+                    statusLabel.getText() == null || statusLabel.getText().isBlank() ? "Loading..." : statusLabel.getText(),
+                    "pillBusy"
+            );
+        }
 
         refreshProfileDependentUi();
     }
 
+    private void refreshProfileDependentUi() {
+        boolean hasProfile = profileCombo != null && profileCombo.getValue() != null;
+        boolean loggedIn = isLoggedIn();
 
-
-
-
-
-
-
-    private void appendLog(String s) {
-        // NICHT direkt in die TextArea schreiben -> nur queue
-        if (s == null) return;
-        logQueue.add(s);
+        if (openFolderButton != null) openFolderButton.setDisable(uiBusy || !hasProfile);
+        if (updateButton != null) updateButton.setDisable(uiBusy || !hasProfile);
+        if (playButton != null) playButton.setDisable(uiBusy || !hasProfile || !loggedIn);
     }
 
-    private void clearLog() {
-        logQueue.clear();
-        logArea.clear();
-    }
+    // -------------------- Login --------------------
 
-    private void flushLogQueue() {
-        if (logArea == null) return;
-
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < LOG_FLUSH_MAX_LINES; i++) {
-            String line = logQueue.poll();
-            if (line == null) break;
-            sb.append(line).append('\n');
+    private void tryLoadSavedMicrosoftSession() {
+        var s = msStore.loadOrNull();
+        if (s == null) {
+            setLoginStatus("Nicht eingeloggt");
+            return;
         }
 
-        if (sb.length() == 0) return;
-
-        logArea.appendText(sb.toString());
-
-        // TextArea begrenzen (sonst RAM wächst endlos)
-        int len = logArea.getLength();
-        if (len > LOG_MAX_CHARS) {
-            logArea.deleteText(0, len - LOG_MAX_CHARS);
+        long now = Instant.now().getEpochSecond();
+        if (s.expiresAtEpochSec() <= now + 60) {
+            msStore.clear();
+            setLoginStatus("Nicht eingeloggt (Session abgelaufen)");
+            appendLog("[LOGIN] gespeicherte Session abgelaufen -> gelöscht");
+            return;
         }
+
+        mcSession = s;
+        updateAccountUi();
+        setLoginStatus("Eingeloggt als: " + mcSession.playerName());
+        appendLog("[LOGIN] Session geladen: " + mcSession.playerName());
     }
 
-
-    private void showError(String msg) {
-        Alert a = new Alert(Alert.AlertType.ERROR);
-        a.setTitle("Fehler");
-        a.setHeaderText("Aktion fehlgeschlagen");
-        a.setContentText(msg);
-        a.showAndWait();
+    private boolean isLoggedIn() {
+        return mcSession != null
+                && mcSession.minecraftAccessToken() != null
+                && !mcSession.minecraftAccessToken().isBlank();
     }
 
-    private void setLoginStatus(String text) {
-        if (loginStatusLabel == null) return;
+    private boolean requireLoginOrPopup() {
+        if (isLoggedIn()) return true;
 
-        Platform.runLater(() -> loginStatusLabel.setText(text));
+        Alert a = new Alert(Alert.AlertType.INFORMATION);
+        a.setTitle("Login erforderlich");
+        a.setHeaderText("Du musst dich erst einloggen");
+        a.setContentText("Bitte melde dich mit Microsoft an, bevor du Minecraft starten kannst.");
+
+        ButtonType loginNow = new ButtonType("Jetzt einloggen", ButtonBar.ButtonData.OK_DONE);
+        ButtonType cancel = new ButtonType("Abbrechen", ButtonBar.ButtonData.CANCEL_CLOSE);
+        a.getButtonTypes().setAll(loginNow, cancel);
+
+        var res = a.showAndWait().orElse(cancel);
+        if (res == loginNow) {
+            onLoginClicked();
+        }
+        return false;
     }
-
-    private void showDeviceCodeDialog(String code, String verificationUrl) {
-        Dialog<Void> d = new Dialog<>();
-        d.setTitle("Microsoft Login");
-        d.setHeaderText("Code kopiert ✅");
-
-        ButtonType copyBtnType = new ButtonType("Code kopieren", ButtonBar.ButtonData.LEFT);
-        ButtonType openBtnType = new ButtonType("Seite öffnen", ButtonBar.ButtonData.LEFT);
-        ButtonType closeBtnType = new ButtonType("Schließen", ButtonBar.ButtonData.CANCEL_CLOSE);
-
-        d.getDialogPane().getButtonTypes().setAll(copyBtnType, openBtnType, closeBtnType);
-
-        VBox box = new VBox(8);
-        box.setPadding(new Insets(12));
-        box.getChildren().addAll(
-                new Label("1) Browser öffnen"),
-                new Label("2) Code einfügen"),
-                new Label("3) bei Microsoft einloggen und hierher zurückkehren"),
-                new Label("Code: " + code)
-        );
-        d.getDialogPane().setContent(box);
-
-        // Buttons holen
-        Button copyBtn = (Button) d.getDialogPane().lookupButton(copyBtnType);
-        Button openBtn = (Button) d.getDialogPane().lookupButton(openBtnType);
-
-        // WICHTIG: Button-Klick darf Dialog NICHT schließen -> Event konsumieren
-        copyBtn.addEventFilter(ActionEvent.ACTION, e -> {
-            copyToClipboard(code);
-            appendLog("[LOGIN] Code kopiert: " + code);
-            e.consume();
-        });
-
-        openBtn.addEventFilter(ActionEvent.ACTION, e -> {
-            try {
-                Desktop.getDesktop().browse(java.net.URI.create(verificationUrl));
-            } catch (Exception ignored) {
-            }
-            e.consume();
-        });
-
-        // Nur Schließen/X schließen wirklich
-        loginDialog = d;
-        d.setOnHidden(e -> {
-            if (loginDialog == d) loginDialog = null;
-        });
-        d.show();
-
-    }
-
 
     @FXML
     private void onLoginClicked() {
@@ -993,11 +901,8 @@ public class Controller {
             @Override
             protected MicrosoftMinecraftAuth.MinecraftSession call() throws Exception {
                 MicrosoftMinecraftAuth auth = new MicrosoftMinecraftAuth();
-
-                // 1) Device code holen
                 var dc = auth.startDeviceCode();
 
-                // 2) User informieren
                 Platform.runLater(() -> {
                     appendLog("[LOGIN] Öffne: " + dc.verificationUri());
                     appendLog("[LOGIN] Code:  " + dc.userCode());
@@ -1005,16 +910,13 @@ public class Controller {
                     copyToClipboard(dc.userCode());
                     setLoginStatus("Code kopiert: " + dc.userCode());
 
-                    // Browser optional automatisch öffnen ODER nur Dialogbutton
                     try {
                         Desktop.getDesktop().browse(java.net.URI.create(dc.verificationUri()));
-                    } catch (Exception ignored) {
-                    }
+                    } catch (Exception ignored) {}
 
                     showDeviceCodeDialog(dc.userCode(), dc.verificationUri());
                 });
 
-                // 3) Polling bis fertig
                 return auth.loginWithDeviceCode(dc);
             }
         };
@@ -1046,135 +948,6 @@ public class Controller {
         new Thread(task, "ms-login").start();
     }
 
-    private void setStatus(String text, String pillStyle) {
-        Platform.runLater(() -> {
-            statusLabel.textProperty().unbind();
-            statusLabel.setText(text);
-            statusLabel.getStyleClass().removeAll("pillOk", "pillBusy", "pillError");
-            statusLabel.getStyleClass().add(pillStyle);
-        });
-    }
-
-    private String detectVersion() {
-        // kommt aus Manifest Implementation-Version (Gradle/Maven setzen, siehe unten)
-        String v = getClass().getPackage().getImplementationVersion();
-        return (v == null || v.isBlank()) ? "dev" : v;
-    }
-
-
-    @FXML
-    private void onCopyLog() {
-        var cb = new javafx.scene.input.ClipboardContent();
-        cb.putString(logArea.getText());
-        javafx.scene.input.Clipboard.getSystemClipboard().setContent(cb);
-    }
-
-    @FXML
-    private void onClearLog() {
-        clearLog();
-    }
-
-    private boolean isLoggedIn() {
-        return mcSession != null
-                && mcSession.minecraftAccessToken() != null
-                && !mcSession.minecraftAccessToken().isBlank();
-    }
-
-    private boolean requireLoginOrPopup() {
-        if (isLoggedIn()) return true;
-
-        Alert a = new Alert(Alert.AlertType.INFORMATION);
-        a.setTitle("Login erforderlich");
-        a.setHeaderText("Du musst dich erst einloggen");
-        a.setContentText("Bitte melde dich mit Microsoft an, bevor du Minecraft starten kannst.");
-
-        ButtonType loginNow = new ButtonType("Jetzt einloggen", ButtonBar.ButtonData.OK_DONE);
-        ButtonType cancel = new ButtonType("Abbrechen", ButtonBar.ButtonData.CANCEL_CLOSE);
-        a.getButtonTypes().setAll(loginNow, cancel);
-
-        var res = a.showAndWait().orElse(cancel);
-        if (res == loginNow) {
-            onLoginClicked(); // startet deinen Device-Code Login
-        }
-        return false;
-    }
-
-
-    private ManifestModels.Manifest fetchManifest(String url) throws Exception {
-        var om = new com.fasterxml.jackson.databind.ObjectMapper();
-        var client = java.net.http.HttpClient.newBuilder()
-                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
-                .build();
-
-        // 1) Wenn URL auf latest.json zeigt -> erst pointer lesen
-        if (url.endsWith("latest.json")) {
-            var req1 = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).GET().build();
-            var resp1 = client.send(req1, java.net.http.HttpResponse.BodyHandlers.ofString());
-            if (resp1.statusCode() != 200) throw new RuntimeException("latest HTTP " + resp1.statusCode());
-
-            LatestPointer latest = om.readValue(resp1.body(), LatestPointer.class);
-            url = latest.manifestUrl(); // <- jetzt manifest.json URL
-        }
-
-        // 2) manifest.json laden
-        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).GET().build();
-        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() != 200) throw new RuntimeException("Manifest HTTP " + resp.statusCode());
-
-        return om.readValue(resp.body(), ManifestModels.Manifest.class);
-    }
-
-
-    private void updateAccountUi() {
-        Platform.runLater(() -> {
-            boolean loggedIn = isLoggedIn();
-
-            String name = loggedIn ? mcSession.playerName() : "Nicht eingeloggt";
-            if (accountNameLabel != null) accountNameLabel.setText(name);
-
-            if (skinView != null) {
-                String headUrl;
-                if (loggedIn) {
-                    // 3D/2D Head Render (funktioniert easy)
-                    headUrl = "https://minotar.net/helm/" + mcSession.playerName() + "/64.png";
-                } else {
-                    // Steve fallback
-                    headUrl = "https://minotar.net/helm/Steve/64.png";
-                }
-                skinView.setImage(new Image(headUrl, true)); // backgroundLoading=true
-            }
-
-            if (loginButton != null) {
-                loginButton.setText(loggedIn ? "Logout" : "Login (Microsoft)");
-            }
-
-        });
-    }
-
-
-    @FXML
-    public void onOpenMainFolder() {
-        try {
-            Path mainDir = Path.of(
-                    System.getProperty("user.home"),
-                    "AppData", "Roaming", ".modlauncher"
-            );
-
-            if (!mainDir.toFile().exists()) {
-                showError("Main-Ordner existiert nicht:\n" + mainDir);
-                return;
-            }
-
-            if (Desktop.isDesktopSupported()) {
-                Desktop.getDesktop().open(mainDir.toFile());
-            } else {
-                showError("Desktop-Open wird auf diesem System nicht unterstützt.");
-            }
-        } catch (Exception e) {
-            showError("Konnte Main-Ordner nicht öffnen:\n" + e.getMessage());
-        }
-    }
-
     @FXML
     private void onAccountButton() {
         if (isLoggedIn()) {
@@ -1202,19 +975,78 @@ public class Controller {
         updateAccountUi();
     }
 
-    private void copyToClipboard(String text) {
-        ClipboardContent c = new ClipboardContent();
-        c.putString(text);
-        Clipboard.getSystemClipboard().setContent(c);
+    private void updateAccountUi() {
+        Platform.runLater(() -> {
+            boolean loggedIn = isLoggedIn();
+
+            String name = loggedIn ? mcSession.playerName() : "Nicht eingeloggt";
+            if (accountNameLabel != null) accountNameLabel.setText(name);
+
+            if (skinView != null) {
+                String headUrl = loggedIn
+                        ? "https://minotar.net/helm/" + mcSession.playerName() + "/64.png"
+                        : "https://minotar.net/helm/Steve/64.png";
+                skinView.setImage(new Image(headUrl, true));
+            }
+
+            if (loginButton != null) {
+                loginButton.setText(loggedIn ? "Logout" : "Login (Microsoft)");
+            }
+        });
     }
 
+    private void setLoginStatus(String text) {
+        if (loginStatusLabel == null) return;
+        Platform.runLater(() -> loginStatusLabel.setText(text));
+    }
+
+    private void showDeviceCodeDialog(String code, String verificationUrl) {
+        Dialog<Void> d = new Dialog<>();
+        d.setTitle("Microsoft Login");
+        d.setHeaderText("Code kopiert ✅");
+
+        ButtonType copyBtnType = new ButtonType("Code kopieren", ButtonBar.ButtonData.LEFT);
+        ButtonType openBtnType = new ButtonType("Seite öffnen", ButtonBar.ButtonData.LEFT);
+        ButtonType closeBtnType = new ButtonType("Schließen", ButtonBar.ButtonData.CANCEL_CLOSE);
+
+        d.getDialogPane().getButtonTypes().setAll(copyBtnType, openBtnType, closeBtnType);
+
+        VBox box = new VBox(8);
+        box.setPadding(new Insets(12));
+        box.getChildren().addAll(
+                new Label("1) Browser öffnen"),
+                new Label("2) Code einfügen"),
+                new Label("3) bei Microsoft einloggen und hierher zurückkehren"),
+                new Label("Code: " + code)
+        );
+        d.getDialogPane().setContent(box);
+
+        Button copyBtn = (Button) d.getDialogPane().lookupButton(copyBtnType);
+        Button openBtn = (Button) d.getDialogPane().lookupButton(openBtnType);
+
+        copyBtn.addEventFilter(ActionEvent.ACTION, e -> {
+            copyToClipboard(code);
+            appendLog("[LOGIN] Code kopiert: " + code);
+            e.consume();
+        });
+
+        openBtn.addEventFilter(ActionEvent.ACTION, e -> {
+            try {
+                Desktop.getDesktop().browse(java.net.URI.create(verificationUrl));
+            } catch (Exception ignored) {}
+            e.consume();
+        });
+
+        loginDialog = d;
+        d.setOnHidden(e -> {
+            if (loginDialog == d) loginDialog = null;
+        });
+        d.show();
+    }
 
     private void closeLoginDialogIfOpen() {
         if (loginDialog != null) {
-            try {
-                loginDialog.close();
-            } catch (Exception ignored) {
-            }
+            try { loginDialog.close(); } catch (Exception ignored) {}
             loginDialog = null;
         }
     }
@@ -1227,16 +1059,142 @@ public class Controller {
         a.getButtonTypes().setAll(ButtonType.OK);
         a.show();
 
-        // Auto-close nach 2 Sekunden
         Timeline t = new Timeline(new KeyFrame(Duration.seconds(2), e -> a.close()));
         t.setCycleCount(1);
         t.play();
     }
 
+    // -------------------- Misc actions --------------------
+
+    @FXML
+    public void onOpenMainFolder() {
+        try {
+            Path mainDir = Path.of(System.getProperty("user.home"), "AppData", "Roaming", ".modlauncher");
+
+            if (!mainDir.toFile().exists()) {
+                showError("Main-Ordner existiert nicht:\n" + mainDir);
+                return;
+            }
+
+            if (Desktop.isDesktopSupported()) {
+                Desktop.getDesktop().open(mainDir.toFile());
+            } else {
+                showError("Desktop-Open wird auf diesem System nicht unterstützt.");
+            }
+        } catch (Exception e) {
+            showError("Konnte Main-Ordner nicht öffnen:\n" + e.getMessage());
+        }
+    }
+
+    @FXML
+    private void onCopyLog() {
+        var cb = new ClipboardContent();
+        cb.putString(logArea != null ? logArea.getText() : "");
+        Clipboard.getSystemClipboard().setContent(cb);
+    }
+
+    @FXML
+    private void onClearLog() {
+        clearLog();
+    }
+
+    // -------------------- Status / version / errors --------------------
+
+    private void setStatus(String text, String pillStyle) {
+        Platform.runLater(() -> {
+            if (statusLabel == null) return;
+            statusLabel.textProperty().unbind();
+            statusLabel.setText(text);
+            statusLabel.getStyleClass().removeAll("pillOk", "pillBusy", "pillError");
+            statusLabel.getStyleClass().add(pillStyle);
+        });
+    }
+
+    private String detectVersion() {
+        String v = getClass().getPackage().getImplementationVersion();
+        return (v == null || v.isBlank()) ? "dev" : v;
+    }
+
+    private void showError(String msg) {
+        Alert a = new Alert(Alert.AlertType.ERROR);
+        a.setTitle("Fehler");
+        a.setHeaderText("Aktion fehlgeschlagen");
+        a.setContentText(msg);
+        a.showAndWait();
+    }
+
+    private static String formatException(Throwable t) {
+        if (t == null) return "unbekannt";
+        String msg = t.getMessage();
+        if (msg == null || msg.isBlank()) msg = t.getClass().getName();
+
+        Throwable c = t.getCause();
+        if (c != null) {
+            String cm = c.getMessage();
+            if (cm == null || cm.isBlank()) cm = c.getClass().getName();
+            msg += " | cause: " + cm;
+        }
+        return msg;
+    }
+
+    private void copyToClipboard(String text) {
+        ClipboardContent c = new ClipboardContent();
+        c.putString(text);
+        Clipboard.getSystemClipboard().setContent(c);
+    }
+
+    // -------------------- Manifest / Changelog helpers --------------------
+
+    private ManifestModels.Manifest fetchManifest(String url) throws Exception {
+        var om = new com.fasterxml.jackson.databind.ObjectMapper();
+        var client = java.net.http.HttpClient.newBuilder()
+                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
+                .build();
+
+        if (url.endsWith("latest.json")) {
+            var req1 = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).GET().build();
+            var resp1 = client.send(req1, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (resp1.statusCode() != 200) throw new RuntimeException("latest HTTP " + resp1.statusCode());
+
+            LatestPointer latest = om.readValue(resp1.body(), LatestPointer.class);
+            url = latest.manifestUrl();
+        }
+
+        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).GET().build();
+        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() != 200) throw new RuntimeException("Manifest HTTP " + resp.statusCode());
+
+        return om.readValue(resp.body(), ManifestModels.Manifest.class);
+    }
+
+    private String loadTextFromUrl(String url) throws Exception {
+        var client = java.net.http.HttpClient.newBuilder()
+                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
+                .build();
+
+        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
+                .GET()
+                .build();
+
+        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        if (resp.statusCode() != 200) {
+            throw new RuntimeException("Changelog HTTP " + resp.statusCode());
+        }
+        return resp.body();
+    }
+
+    private static String resolveUrl(String base, String maybeRelative) {
+        if (maybeRelative == null) return "";
+        String s = maybeRelative.trim();
+        if (s.isEmpty()) return "";
+        if (s.startsWith("http://") || s.startsWith("https://")) return s;
+        return java.net.URI.create(base).resolve(s).toString();
+    }
+
+    // -------------------- Host Mode (unchanged) --------------------
 
     @FXML
     public void onHostMode() {
-        // Dialog
         Dialog<CreateHostProjectRequest> d = new Dialog<>();
         d.setTitle("Projekt hosten");
         d.setHeaderText(null);
@@ -1247,7 +1205,7 @@ public class Controller {
         GridPane gp = new GridPane();
         gp.setHgap(10);
         gp.setVgap(10);
-        gp.setPadding(new javafx.geometry.Insets(12));
+        gp.setPadding(new Insets(12));
 
         TextField projectId = new TextField("testpack");
         TextField name = new TextField("Test Pack");
@@ -1261,9 +1219,7 @@ public class Controller {
         TextField baseUrl = new TextField("https://mc.local/testpack/");
         TextField initialVersion = new TextField("1.0.0");
 
-        TextField outFolder = new TextField(
-                profileStore.baseDir().resolve("host-projects").toString()
-        );
+        TextField outFolder = new TextField(profileStore.baseDir().resolve("host-projects").toString());
         Button browse = new Button("…");
         browse.setOnAction(e -> {
             DirectoryChooser ch = new DirectoryChooser();
@@ -1287,7 +1243,6 @@ public class Controller {
 
         d.getDialogPane().setContent(gp);
 
-        // LoaderVersion nur bei VANILLA deaktivieren
         loader.valueProperty().addListener((obs, o, n) -> {
             boolean vanilla = (n == de.levingamer8.modlauncher.core.LoaderType.VANILLA);
             loaderVersion.setDisable(vanilla);
@@ -1307,7 +1262,7 @@ public class Controller {
         d.setResultConverter(bt -> {
             if (bt != createBtn) return null;
             return new CreateHostProjectRequest(
-                    projectId.getText().trim().toLowerCase(),
+                    projectId.getText().trim().toLowerCase(Locale.ROOT),
                     name.getText().trim(),
                     mcVersion.getText().trim(),
                     loader.getValue(),
@@ -1331,7 +1286,6 @@ public class Controller {
             appendLog("[HOST] latest: " + paths.latestJson());
             appendLog("[HOST] manifest: " + paths.manifestJson());
 
-            // Ordner öffnen
             if (Desktop.isDesktopSupported()) {
                 Desktop.getDesktop().open(paths.projectRoot().toFile());
             }
@@ -1395,7 +1349,6 @@ public class Controller {
             private final HBox row = new HBox(10, icon, textBox);
             private final VBox root = new VBox(8, row);
 
-            // Guard pro Cell (wichtig wegen Cell-Recycling)
             private String expectedIconUrl;
 
             {
@@ -1446,8 +1399,7 @@ public class Controller {
 
         Button addBtn = new Button("Add to Pack");
         Button genBtn = new Button("Generate Manifest");
-        genBtn.setDisable(true);
-
+        genBtn.setDisable(false);
         addBtn.setDisable(true);
 
         list.getSelectionModel().selectedItemProperty().addListener((obs, o, n) -> addBtn.setDisable(n == null));
@@ -1536,9 +1488,8 @@ public class Controller {
         prevBtn.setOnAction(e -> doSearch.accept(Math.max(0, offset.get() - pageSize)));
         nextBtn.setOnAction(e -> doSearch.accept(offset.get() + pageSize));
 
-        Path filesDir = modsDir.getParent();                // .../files
-        Path manifestPath = filesDir.getParent().resolve("manifest.json"); // .../manifest.json
-        genBtn.setDisable(false);
+        Path filesDir = modsDir.getParent();
+        Path manifestPath = filesDir.getParent().resolve("manifest.json");
 
         genBtn.setOnAction(e -> {
             progress.setVisible(true);
@@ -1579,7 +1530,6 @@ public class Controller {
         });
 
         addBtn.setOnAction(e -> {
-
             SearchHit sel = list.getSelectionModel().getSelectedItem();
             if (sel == null) return;
 
@@ -1600,7 +1550,6 @@ public class Controller {
                 Path jar = t.getValue();
                 appendLog("[HOST] Mod hinzugefügt: " + jar.getFileName());
 
-                // Manifest direkt aktualisieren
                 Task<Void> gen = new Task<>() {
                     @Override protected Void call() throws Exception {
                         new HostManifestGenerator().generate(manifestPath, filesDir);
@@ -1629,7 +1578,6 @@ public class Controller {
                 th2.start();
             });
 
-
             t.setOnFailed(ev -> {
                 Throwable ex = t.getException();
                 progress.setVisible(false);
@@ -1646,33 +1594,6 @@ public class Controller {
         dialog.showAndWait();
     }
 
-
-    private String loadTextFromUrl(String url) throws Exception {
-        var client = java.net.http.HttpClient.newBuilder()
-                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
-                .build();
-
-        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
-                .GET()
-                .build();
-
-        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
-        if (resp.statusCode() != 200) {
-            throw new RuntimeException("Changelog HTTP " + resp.statusCode());
-        }
-        return resp.body();
-    }
-
-    private static String resolveUrl(String base, String maybeRelative) {
-        if (maybeRelative == null) return "";
-        String s = maybeRelative.trim();
-        if (s.isEmpty()) return "";
-        if (s.startsWith("http://") || s.startsWith("https://")) return s;
-        return java.net.URI.create(base).resolve(s).toString();
-    }
-
-
-
     private static String formatDownloads(long n) {
         if (n < 1_000) return Long.toString(n);
         double val;
@@ -1681,19 +1602,19 @@ public class Controller {
         else if (n < 1_000_000_000) { val = n / 1_000_000.0; suffix = "M"; }
         else { val = n / 1_000_000_000.0; suffix = "B"; }
 
-        String s = (val >= 10) ? String.format(java.util.Locale.US, "%.0f", val)
-                : String.format(java.util.Locale.US, "%.1f", val);
+        String s = (val >= 10) ? String.format(Locale.US, "%.0f", val)
+                : String.format(Locale.US, "%.1f", val);
         if (s.endsWith(".0")) s = s.substring(0, s.length() - 2);
         return s + suffix;
     }
 
-    private void loadIconAsync(String url, javafx.scene.image.ImageView target, java.util.function.Supplier<String> currentUrl) {
+    private void loadIconAsync(String url, ImageView target, java.util.function.Supplier<String> currentUrl) {
         if (url == null || url.isBlank()) {
             target.setImage(null);
             return;
         }
 
-        javafx.scene.image.Image cached = iconCache.get(url);
+        Image cached = iconCache.get(url);
         if (cached != null) {
             target.setImage(cached);
             return;
@@ -1701,14 +1622,14 @@ public class Controller {
 
         target.setImage(null);
 
-        javafx.concurrent.Task<javafx.scene.image.Image> t = new javafx.concurrent.Task<>() {
-            @Override protected javafx.scene.image.Image call() throws Exception {
+        Task<Image> t = new Task<>() {
+            @Override protected Image call() throws Exception {
                 var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
                         .header("User-Agent", "ModLauncher/1.0 (host-mode)")
                         .GET().build();
                 var res = iconHttp.send(req, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
                 if (res.statusCode() != 200) return null;
-                return new javafx.scene.image.Image(new java.io.ByteArrayInputStream(res.body()));
+                return new Image(new java.io.ByteArrayInputStream(res.body()));
             }
         };
 
@@ -1725,35 +1646,4 @@ public class Controller {
         th.setDaemon(true);
         th.start();
     }
-    private void refreshPlaytimeUi() {
-        // global store initialisieren
-        if (globalPlaytimeStore == null) {
-            Path globalFile = profileStore.baseDir().resolve("playtime-global.properties");
-            globalPlaytimeStore = new PlaytimeStore(globalFile);
-        }
-
-        Profile p = (profileCombo != null) ? profileCombo.getValue() : null;
-
-        if (p == null) {
-            if (instancePlaytimeLabel != null) instancePlaytimeLabel.setText("-");
-            if (globalPlaytimeLabel != null) globalPlaytimeLabel.setText("Gesamt: " + globalPlaytimeStore.getTotalPretty());
-            return;
-        }
-
-        Path instFile = profileStore.instanceDir(p.name()).resolve("playtime.properties");
-        instancePlaytimeStore = new PlaytimeStore(instFile);
-
-        if (instancePlaytimeLabel != null) instancePlaytimeLabel.setText(instancePlaytimeStore.getTotalPretty());
-        if (globalPlaytimeLabel != null) globalPlaytimeLabel.setText("Gesamt: " + globalPlaytimeStore.getTotalPretty());
-    }
-
-    private void refreshProfileDependentUi() {
-        boolean hasProfile = profileCombo != null && profileCombo.getValue() != null;
-        boolean loggedIn = isLoggedIn();
-
-        if (openFolderButton != null) openFolderButton.setDisable(uiBusy || !hasProfile);
-        if (updateButton != null) updateButton.setDisable(uiBusy || !hasProfile);
-        if (playButton != null) playButton.setDisable(uiBusy || !hasProfile || !loggedIn);
-    }
-
 }

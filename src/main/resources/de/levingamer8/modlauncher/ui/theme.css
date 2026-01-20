@@ -54,8 +54,8 @@
     -fx-font-size: 13px;
 }
 .muted { -fx-text-fill: -muted; }
-.mutedSmall { -fx-text-fill: -muted2; -fx-font-size: 11px; }
-.version { -fx-text-fill: rgba(238,242,255,0.55); -fx-font-size: 11px; }
+.mutedSmall { -fx-text-fill: -muted2; -fx-font-size: 13px; }
+.version { -fx-text-fill: rgba(238,242,255,0.55); -fx-font-size: 13px; }
 
 /* ===== Layout ===== */
 .topbar { -fx-padding: 16 18 12 18; }

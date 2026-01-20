@@ -9,6 +9,7 @@ import java.io.InputStreamReader;
 import java.nio.file.*;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.function.Consumer;
 
 public final class MinecraftLauncherService {
@@ -29,55 +30,31 @@ public final class MinecraftLauncherService {
     private final MojangVersionResolver resolver = new MojangVersionResolver();
     private final LibraryService libraryService = new LibraryService();
 
-    private final ProcessWatcher mcWatcher = new ProcessWatcher();
-    private volatile PlaytimeStore playtime;
-
-
-    public boolean isMinecraftRunning() {
-        return mcWatcher.isRunning();
-    }
-
-    public String getTotalPlaytimePretty() {
-        PlaytimeStore p = playtime;
-        return (p == null) ? "0h 00m 00s" : p.getTotalPretty();
-    }
-
-
-    public void launch(Path sharedRoot,
-                       Path instanceGameDir,
-                       Path instanceRuntimeDir,
-                       LaunchSpec spec,
-                       AuthSession auth,
-                       Consumer<String> log) throws Exception {
+    /**
+     * Startet Minecraft, blockiert bis Minecraft beendet ist, und speichert Playtime garantiert.
+     * @return exit code von Minecraft
+     */
+    public int launch(Path sharedRoot,
+                      Path instanceGameDir,
+                      Path instanceRuntimeDir,
+                      LaunchSpec spec,
+                      AuthSession auth,
+                      Consumer<String> log) throws Exception {
 
         final Consumer<String> L = safeLog(log);
-        // NEU: PlaytimeStore 1x initialisieren (Speicherort: sharedRoot)
-        if (this.playtime == null) {
-            this.playtime = new PlaytimeStore(sharedRoot.resolve("playtime.properties"));
 
-            // Listener nur 1x registrieren (sonst doppelt zählen wenn launch() mehrfach aufgerufen wird)
-            mcWatcher.addListener(new ProcessWatcher.Listener() {
-                @Override
-                public void onExited(Process process, Instant startedAt, Instant endedAt, int exitCode) {
-                    playtime.addSession(startedAt, endedAt);
-                    L.accept("[PLAYTIME] Total: " + playtime.getTotalPretty());
-                }
-            });
-        }
-        // --- dirs ---
         Files.createDirectories(sharedRoot);
         Files.createDirectories(instanceGameDir);
         Files.createDirectories(instanceRuntimeDir);
 
-        // natives dir (wichtig, wird in JSON über ${natives_directory} genutzt)
+        PlaytimeStore instancePlaytime = new PlaytimeStore(instanceRuntimeDir.resolve("playtime.properties"));
+        PlaytimeStore globalPlaytime = new PlaytimeStore(sharedRoot.resolve("playtime_total.properties"));
+
         Path nativesDir = instanceRuntimeDir.resolve("natives");
         Files.createDirectories(nativesDir);
 
-        // --- 1) Vanilla Basis (Assets/Index/Client/Libraries via FlowUpdater) ---
         vanillaInstaller.ensureVanillaInstalled(sharedRoot, spec.mcVersion(), L);
         mojang.ensureAssetIndex(sharedRoot, spec.mcVersion());
-
-        // optional: Root-Müll bereinigen (best-effort)
         cleanupSharedRootArtifacts(sharedRoot, spec.mcVersion(), L);
 
         Path assetIndex = sharedRoot.resolve("assets").resolve("indexes").resolve(spec.mcVersion() + ".json");
@@ -85,12 +62,9 @@ public final class MinecraftLauncherService {
             throw new IllegalStateException("Asset index fehlt nach Install: " + assetIndex);
         }
 
-
-        // --- 2) Version JSON + Client Jar garantieren (Vanilla) ---
         mojang.ensureVersionJson(sharedRoot, spec.mcVersion());
         mojang.ensureClientJar(sharedRoot, spec.mcVersion());
 
-        // --- 3) Loader vorbereiten -> versionId bestimmen ---
         String versionId;
         if (spec.loaderType() == LoaderType.VANILLA) {
             versionId = spec.mcVersion();
@@ -99,7 +73,6 @@ public final class MinecraftLauncherService {
             FabricInstaller.LatestFabric latest = fabricInstaller.fetchLatestLoaderForMc(spec.mcVersion());
             String loaderVer = latest.loaderVersion();
             L.accept("[FABRIC] Verwende latest Fabric Loader für " + spec.mcVersion() + ": " + loaderVer);
-
             versionId = fabricInstaller.ensureFabricVersion(sharedRoot, spec.mcVersion(), loaderVer);
 
         } else if (spec.loaderType() == LoaderType.FORGE) {
@@ -108,38 +81,27 @@ public final class MinecraftLauncherService {
             if (forgeVer == null || forgeVer.isBlank()) {
                 throw new IllegalStateException("Forge loaderVersion fehlt im Manifest/LaunchSpec (z.B. 47.4.10).");
             }
-
-                // Modern Forge (1.13+) Probably doesnt work for older versions NEED TO TEST
-                versionId = modernForge.installForge(sharedRoot, mc, forgeVer, L);
-
+            versionId = modernForge.installForge(sharedRoot, mc, forgeVer, L);
 
         } else {
             throw new IllegalStateException("Unbekannter LoaderType: " + spec.loaderType());
         }
 
-        // --- 4) merged version json (inheritsFrom auflösen) ---
         JsonObject v = resolver.resolveMergedVersionJson(sharedRoot, versionId);
 
-        // --- 5) Classpath sicherstellen (Libraries + ggf. Version-Jar) ---
         List<Path> cp = new ArrayList<>(libraryService.ensureClasspath(sharedRoot, v));
-
-        // Forge BootstrapLauncher: Game-JAR darf NICHT in -cp sein, sonst JPMS Konflikte
         if (spec.loaderType() == LoaderType.FORGE) {
             removeGameJarFromClasspath(cp, sharedRoot, v, versionId);
         } else {
             ensureGameJarOnClasspath(cp, sharedRoot, v, versionId);
         }
 
-        // --- 6) Vars für ${...} Platzhalter aus JSON ---
         Map<String, String> vars = new HashMap<>();
-
-        // Standard Launcher vars (wichtig!)
         vars.put("natives_directory", nativesDir.toAbsolutePath().toString());
         vars.put("library_directory", sharedRoot.resolve("libraries").toAbsolutePath().toString());
         vars.put("classpath_separator", System.getProperty("path.separator"));
         vars.put("classpath", ArgsBuilder.joinClasspath(cp));
 
-        // Mojang / Game vars
         vars.put("auth_player_name", auth.playerName());
         vars.put("auth_uuid", auth.uuid());
         vars.put("auth_access_token", auth.accessToken());
@@ -152,17 +114,12 @@ public final class MinecraftLauncherService {
         vars.put("assets_root", sharedRoot.resolve("assets").toAbsolutePath().toString());
         vars.put("assets_index_name", spec.mcVersion());
 
-        // Defaults, damit --width/--height nie ohne Wert bleiben
         vars.putIfAbsent("resolution_width", "854");
         vars.putIfAbsent("resolution_height", "480");
 
-
-
-        // Launcher identity (kommt in manchen JSONs vor)
         vars.put("launcher_name", LAUNCHER_NAME);
         vars.put("launcher_version", LAUNCHER_VERSION);
 
-        // --- 7) Args aus JSON bauen (sauber, ohne nachträgliches Gepfusche) ---
         ArgsBuilder argsBuilder = new ArgsBuilder();
 
         List<String> jvmArgs = sanitizeUnresolvedArgs(argsBuilder.buildJvmArgs(v, vars));
@@ -175,15 +132,11 @@ public final class MinecraftLauncherService {
         ));
         gameArgs.removeIf("--demo"::equals);
 
-
-        // Memory: falls JSON nichts setzt, setzen wir es hier (ohne Forge/Fabric kaputt zu machen)
         jvmArgs = ensureMemoryArgs(jvmArgs, spec.memoryMb());
 
-        // --- 8) MainClass + Java ---
         String mainClass = v.get("mainClass").getAsString();
         Path javaExe = JavaRuntimeManager.ensureJava(spec.mcVersion(), L);
 
-        // --- 9) Cmd (WICHTIG: JVM-Args VOR mainClass, keine extra -cp Hacks!) ---
         List<String> cmd = new ArrayList<>();
         cmd.add(javaExe.toString());
         cmd.addAll(jvmArgs);
@@ -196,21 +149,69 @@ public final class MinecraftLauncherService {
         pb.directory(instanceGameDir.toFile());
         pb.redirectErrorStream(true);
 
-        Process p = mcWatcher.start(pb);
+        Instant startedAt = Instant.now();
+        Process p = pb.start();
 
 
+        ExecutorService es = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "mc-stdout");
+            t.setDaemon(true);
+            return t;
+        });
 
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-            String line;
-            while ((line = r.readLine()) != null) {
-                L.accept("[MC] " + line);
+        Future<?> reader = es.submit(() -> {
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                String line;
+                while ((line = r.readLine()) != null) {
+                    L.accept("[MC] " + line);
+                }
+            } catch (Exception e) {
+                L.accept("[MC] log-reader ended: " + e.getMessage());
+            }
+        });
+
+        int exit;
+        try {
+            exit = p.waitFor();
+            try { reader.get(2, TimeUnit.SECONDS); } catch (Exception ignored) {}
+
+        } finally {
+            es.shutdownNow();
+
+            Instant endedAt = Instant.now();
+            long addSec = java.time.Duration.between(startedAt, endedAt).getSeconds();
+            L.accept("[PLAYTIME] Session seconds = " + addSec);
+
+
+            instancePlaytime.addSession(startedAt, endedAt);
+            globalPlaytime.addSession(startedAt, endedAt);
+
+
+            try {
+                instancePlaytime.save();
+            } catch (Throwable ignored) {}
+
+            try {
+                globalPlaytime.save();
+            } catch (Throwable ignored) {}
+
+            L.accept("[PLAYTIME] Instanz: " + instancePlaytime.getTotalPretty());
+            L.accept("[PLAYTIME] Gesamt:  " + globalPlaytime.getTotalPretty());
+
+
+            if (p.isAlive()) {
+                p.destroy();
+                try { p.waitFor(1, TimeUnit.SECONDS); } catch (Exception ignored) {}
+                if (p.isAlive()) p.destroyForcibly();
             }
         }
 
-        int exit = p.waitFor();
+
         if (exit != 0) {
-            throw new RuntimeException("Minecraft exited with code " + exit);
+            L.accept("[LAUNCH] Minecraft exited with code " + exit);
         }
+
+        return exit;
     }
 
     // ---------------- helpers ----------------
@@ -227,37 +228,26 @@ public final class MinecraftLauncherService {
                 out.add(a);
                 continue;
             }
-
-            // Option erwartet einen Wert
             if (i + 1 >= args.size()) continue;
             String next = args.get(i + 1);
-
-            // fehlt oder sieht aus wie nächste Option => Option droppen
             if (next == null || next.isBlank() || next.startsWith("--")) continue;
-
             out.add(a);
             out.add(next);
-            i++; // value consumed
+            i++;
         }
         return out;
     }
 
-
-    /**
-     * Entfernt nur wirklich unresolved Tokens, die NICHT ersetzt wurden.
-     * Wenn ArgsBuilder korrekt ersetzt, bleibt hier praktisch alles drin.
-     */
     private static List<String> sanitizeUnresolvedArgs(List<String> args) {
         List<String> out = new ArrayList<>(args.size());
         for (String a : args) {
             if (a == null) continue;
-            if (a.isBlank()) continue;     // WICHTIG
-            if (a.contains("${")) continue; // Platzhalter nicht aufgelöst -> raus
+            if (a.isBlank()) continue;
+            if (a.contains("${")) continue;
             out.add(a);
         }
         return out;
     }
-
 
     private static List<String> ensureMemoryArgs(List<String> jvmArgs, int memoryMb) {
         if (memoryMb <= 0) return jvmArgs;
@@ -275,8 +265,6 @@ public final class MinecraftLauncherService {
     }
 
     private static void ensureGameJarOnClasspath(List<Path> cp, Path sharedRoot, JsonObject merged, String versionId) throws Exception {
-        // Mojang/Forge: "jar" sagt, welches versions/<jarId>/<jarId>.jar genutzt wird.
-        // Wenn nicht vorhanden, fallback auf inheritsFrom, sonst versionId.
         String jarId = versionId;
 
         if (merged.has("jar") && merged.get("jar").isJsonPrimitive()) {
@@ -297,40 +285,6 @@ public final class MinecraftLauncherService {
         cp.add(jar);
     }
 
-
-    private static Path downloadForgeInstallerJar(Path sharedRoot, String mcVersion, String forgeVersion, Consumer<String> log) throws Exception {
-        Path dir = sharedRoot.resolve("installers").resolve("forge").resolve(mcVersion + "-" + forgeVersion);
-        Files.createDirectories(dir);
-
-        String file = "forge-" + mcVersion + "-" + forgeVersion + "-installer.jar";
-        Path out = dir.resolve(file);
-
-        if (Files.exists(out) && Files.size(out) > 100_000) {
-            log.accept("[FORGE] Installer vorhanden: " + out);
-            return out;
-        }
-
-        String url = "https://maven.minecraftforge.net/net/minecraftforge/forge/"
-                + mcVersion + "-" + forgeVersion + "/"
-                + file;
-
-        log.accept("[FORGE] Download Installer: " + url);
-
-        var client = java.net.http.HttpClient.newBuilder()
-                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
-                .build();
-
-        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).GET().build();
-        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
-
-        if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
-            throw new RuntimeException("Forge installer download failed HTTP " + resp.statusCode() + ": " + url);
-        }
-
-        Files.write(out, resp.body(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-        return out;
-    }
-
     private static void removeGameJarFromClasspath(List<Path> cp, Path sharedRoot, JsonObject merged, String versionId) {
         String jarId = versionId;
 
@@ -346,15 +300,13 @@ public final class MinecraftLauncherService {
         cp.removeIf(p -> p != null && p.toAbsolutePath().normalize().equals(gameJar));
     }
 
-
     private static void cleanupSharedRootArtifacts(Path sharedRoot, String mcVersion, Consumer<String> log) {
         try {
-            // --- 1) shared/<mcVersion>.json ---
             Path rootJson = sharedRoot.resolve(mcVersion + ".json");
             if (Files.exists(rootJson) && Files.size(rootJson) > 0) {
                 String txt = Files.readString(rootJson);
 
-                boolean looksLikeAssetIndex = txt.contains("\"objects\"");     // Asset-Index hat immer objects
+                boolean looksLikeAssetIndex = txt.contains("\"objects\"");
                 boolean looksLikeVersionJson = txt.contains("\"libraries\"") || txt.contains("\"downloads\"") || txt.contains("\"mainClass\"");
 
                 if (looksLikeAssetIndex && !looksLikeVersionJson) {
@@ -369,7 +321,6 @@ public final class MinecraftLauncherService {
                         log.accept("[CLEANUP] moved asset index " + rootJson + " -> " + dst);
                     }
                 } else {
-                    // als Version JSON behandeln
                     Path dst = sharedRoot.resolve("versions").resolve(mcVersion).resolve(mcVersion + ".json");
                     Files.createDirectories(dst.getParent());
 
@@ -383,7 +334,6 @@ public final class MinecraftLauncherService {
                 }
             }
 
-            // --- 2) shared/client.jar ---
             Path rootClientJar = sharedRoot.resolve("client.jar");
             if (Files.exists(rootClientJar) && Files.size(rootClientJar) > 0) {
                 Path dst = sharedRoot.resolve("versions").resolve(mcVersion).resolve(mcVersion + ".jar");
@@ -400,20 +350,6 @@ public final class MinecraftLauncherService {
 
         } catch (Exception e) {
             log.accept("[CLEANUP] warning: " + e.getMessage());
-        }
-    }
-
-
-
-    private static boolean isAtLeast13(String mcVersion) {
-        try {
-            String[] p = mcVersion.split("\\.");
-            if (p.length < 2) return false;
-            int major = Integer.parseInt(p[0]);
-            int minor = Integer.parseInt(p[1]);
-            return major > 1 || (major == 1 && minor >= 13);
-        } catch (Exception e) {
-            return false;
         }
     }
 }
