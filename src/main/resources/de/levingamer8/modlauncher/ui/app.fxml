@@ -162,15 +162,28 @@
                                     </Tab>
                                     <Tab text="Server">
                                         <VBox spacing="10" styleClass="pad16" VBox.vgrow="ALWAYS">
+
                                             <HBox spacing="10" alignment="CENTER_LEFT">
                                                 <Label text="Status:" styleClass="mutedSmall"/>
                                                 <Label fx:id="serverStatusLabel" text="Unbekannt" styleClass="pillError"/>
                                             </HBox>
+
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Label text="Spieler:" styleClass="mutedSmall"/>
+                                                <Label fx:id="serverPlayersLabel" text="-" styleClass="muted"/>
+                                            </HBox>
+
+                                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                                <Label text="Ping:" styleClass="mutedSmall"/>
+                                                <Label fx:id="serverPingLabel" text="-" styleClass="muted"/>
+                                            </HBox>
+
                                             <Label fx:id="serverDetailsLabel"
                                                    text="Noch kein Check implementiert."
                                                    styleClass="muted"/>
                                         </VBox>
                                     </Tab>
+
                                     <Tab text="Modpack">
                                         <VBox spacing="10" styleClass="pad16" VBox.vgrow="ALWAYS">
                                             <Label fx:id="packInfoLabel"

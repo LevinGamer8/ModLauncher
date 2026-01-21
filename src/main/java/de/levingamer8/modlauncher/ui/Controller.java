@@ -1,6 +1,7 @@
 package de.levingamer8.modlauncher.ui;
 
 import de.levingamer8.modlauncher.auth.MicrosoftMinecraftAuth;
+import de.levingamer8.modlauncher.core.*;
 import de.levingamer8.modlauncher.auth.MicrosoftSessionStore;
 import de.levingamer8.modlauncher.core.ManifestModels;
 import de.levingamer8.modlauncher.core.PackUpdater;
@@ -15,6 +16,12 @@ import de.levingamer8.modlauncher.host.modrinth.ModrinthClient;
 import de.levingamer8.modlauncher.host.modrinth.SearchHit;
 import de.levingamer8.modlauncher.host.modrinth.Version;
 import de.levingamer8.modlauncher.mc.MinecraftLauncherService;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.nio.file.Path;
+
+
 import de.levingamer8.modlauncher.mc.PlaytimeStore;
 import de.levingamer8.modlauncher.update.UpdateController;
 import javafx.animation.Animation;
@@ -37,11 +44,13 @@ import javafx.stage.Modality;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
 
-import java.awt.Desktop;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.time.Instant;
+import javafx.scene.control.SplitPane;
+import javafx.scene.control.TitledPane;
+
+
 import java.util.Locale;
+import java.util.concurrent.*;
+import java.awt.Desktop;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class Controller {
@@ -71,6 +80,9 @@ public class Controller {
     @FXML private Label instancePlaytimeLabel;
     @FXML private Label globalPlaytimeLabel;
 
+    @FXML private Label serverPlayersLabel;
+    @FXML private Label serverPingLabel;
+
     private PlaytimeStore globalPlaytimeStore;
     private PlaytimeStore instancePlaytimeStore;
 
@@ -96,6 +108,17 @@ public class Controller {
     private final java.net.http.HttpClient iconHttp = java.net.http.HttpClient.newBuilder()
             .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
             .build();
+
+
+    private final ScheduledExecutorService serverPollExec =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "server-poll");
+                t.setDaemon(true);
+                return t;
+            });
+
+    private ScheduledFuture<?> serverPollTask;
+
 
     @FXML
     public void initialize() {
@@ -124,7 +147,9 @@ public class Controller {
         profileCombo.valueProperty().addListener((obs, oldV, newV) -> {
             refreshProfileDependentUi();
             refreshPlaytimeUi();
+            restartServerPolling();
         });
+
 
         appendLog("Instanz-Basisordner: " + profileStore.baseDir());
         appendLog("Shared-Cache: " + profileStore.sharedRoot());
@@ -134,7 +159,11 @@ public class Controller {
         tryLoadSavedMicrosoftSession();
         updateAccountUi();
 
-        launcherUpdater = new UpdateController("LevinGamer8", "ModLauncher");
+
+        launcherUpdater = new UpdateController(
+                "LevinGamer8",
+                "ModLauncher"
+        );
 
         if (versionLabel != null) {
             versionLabel.setText("v" + detectVersion());
@@ -160,6 +189,7 @@ public class Controller {
             };
 
             Platform.runLater(() -> Platform.runLater(apply));
+
             logPane.expandedProperty().addListener((obs, oldV, expanded) ->
                     Platform.runLater(() -> Platform.runLater(apply))
             );
@@ -1646,4 +1676,96 @@ public class Controller {
         th.setDaemon(true);
         th.start();
     }
+
+
+
+    private void restartServerPolling() {
+        // Task stoppen
+        if (serverPollTask != null) {
+            serverPollTask.cancel(true);
+            serverPollTask = null;
+        }
+
+        Profile p = (profileCombo != null) ? profileCombo.getValue() : null;
+        if (p == null) {
+            setServerUiUnknown("Kein Profil ausgewählt.");
+            return;
+        }
+
+        String host = (p.serverHost() == null) ? "" : p.serverHost().trim();
+        int port = p.serverPort();
+
+        if (host.isEmpty()) {
+            setServerUiUnknown("Kein Server-H ost gesetzt (Profil bearbeiten).");
+            return;
+        }
+        if (port <= 0 || port > 65535) port = 25565;
+
+        pollServerOnce(host, port);
+
+        //TODO: whats is performance? ping every 30 seconds
+        final String finalHost = host;
+        final int finalPort = port;
+        serverPollTask = serverPollExec.scheduleAtFixedRate(
+                () -> pollServerOnce(finalHost, finalPort),
+                30, 30, TimeUnit.SECONDS
+        );
+    }
+
+    private void pollServerOnce(String host, int port) {
+        // Timeout klein halten, sonst fühlt sich UI "laggy" an
+        MinecraftServerPing.Result r = MinecraftServerPing.ping(host, port, 1500);
+
+        Platform.runLater(() -> {
+            if (r.online()) {
+                // Status
+                if (serverStatusLabel != null) {
+                    serverStatusLabel.setText("Online");
+                    serverStatusLabel.getStyleClass().removeAll("pillOk", "pillBusy", "pillError");
+                    serverStatusLabel.getStyleClass().add("pillOk");
+                }
+
+                if (serverPlayersLabel != null) {
+                    serverPlayersLabel.setText(r.playersOnline() + "/" + r.playersMax());
+                }
+                if (serverPingLabel != null) {
+                    serverPingLabel.setText(r.pingMs() + " ms");
+                }
+
+                if (serverDetailsLabel != null) {
+                    String v = (r.versionName() == null || r.versionName().isBlank()) ? "" : (" • " + r.versionName());
+                    serverDetailsLabel.setText(host + ":" + port + v);
+                }
+            } else {
+                // Offline
+                if (serverStatusLabel != null) {
+                    serverStatusLabel.setText("Offline");
+                    serverStatusLabel.getStyleClass().removeAll("pillOk", "pillBusy", "pillError");
+                    serverStatusLabel.getStyleClass().add("pillError");
+                }
+
+                if (serverPlayersLabel != null) serverPlayersLabel.setText("-");
+                if (serverPingLabel != null) serverPingLabel.setText("-");
+
+                if (serverDetailsLabel != null) {
+                    serverDetailsLabel.setText(host + ":" + port + " (keine Antwort)");
+                }
+            }
+        });
+    }
+
+    private void setServerUiUnknown(String msg) {
+        Platform.runLater(() -> {
+            if (serverStatusLabel != null) {
+                serverStatusLabel.setText("Unbekannt");
+                serverStatusLabel.getStyleClass().removeAll("pillOk", "pillBusy", "pillError");
+                serverStatusLabel.getStyleClass().add("pillError");
+            }
+            if (serverPlayersLabel != null) serverPlayersLabel.setText("-");
+            if (serverPingLabel != null) serverPingLabel.setText("-");
+            if (serverDetailsLabel != null) serverDetailsLabel.setText(msg);
+        });
+    }
+
+
 }
