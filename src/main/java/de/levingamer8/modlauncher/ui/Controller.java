@@ -161,10 +161,13 @@ public class Controller {
         reloadProfilesAndSelect(null);
 
         profileCombo.valueProperty().addListener((obs, oldV, newV) -> {
+            Profile currentProfile = newV;   // WICHTIG: Profil-State setzen!
+
             refreshProfileDependentUi();
             refreshPlaytimeUi();
             restartServerPolling();
         });
+
 
 
         appendLog("Instanz-Basisordner: " + profileStore.baseDir());
@@ -1038,6 +1041,7 @@ public class Controller {
 
         task.setOnSucceeded(e -> {
             mcSession = task.getValue();
+            refreshProfileDependentUi();
 
             setLoginStatus("Eingeloggt als: " + mcSession.playerName());
             appendLog("[LOGIN] OK: " + mcSession.playerName() + " / " + mcSession.uuid());
@@ -1107,8 +1111,12 @@ public class Controller {
             if (loginButton != null) {
                 loginButton.setText(loggedIn ? "Logout" : "Login (Microsoft)");
             }
+
+            // WICHTIG: Buttons neu bewerten -> Start wird sofort klickbar
+            refreshProfileDependentUi();
         });
     }
+
 
     private void setLoginStatus(String text) {
         if (loginStatusLabel == null) return;
