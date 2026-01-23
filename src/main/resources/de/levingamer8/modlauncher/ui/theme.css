@@ -1,46 +1,51 @@
+/*
+  NexoMaker-inspiriert: dunkles Gradient-Mesh + Glas-Karten + Neon-Akzent
+  Hinweis: JavaFX kann kein echtes CSS-Backdrop-Blur. Wir faken Glas über
+  - halbtransparente Flächen
+  - feine Borders
+  - weiche Shadows
+*/
 
-       /*
-         NexoMaker-inspiriert: dunkles Gradient-Mesh + Glas-Karten + Neon-Akzent
-         Hinweis: JavaFX kann kein echtes CSS-Backdrop-Blur. Wir faken Glas über
-         - halbtransparente Flächen
-         - feine Borders
-         - weiche Shadows
-       */
+/* ===== Theme Tokens ===== */
+.root {
+    /* Baseline */
+    -fx-font-family: "Segoe UI";
 
-       /* ===== Theme Tokens ===== */
-   .root {
-       /* Baseline */
-       -fx-font-family: "Segoe UI";
+    /* Colors */
+    -bg0: #0b0f14;
+    -bg1: #0a0d12;
 
-       /* Colors */
-       -bg0: #0b0f14;      /* neutral schwarz/grau */
-       -bg1: #0a0d12;
+    -card: rgba(255,255,255,0.045);
+    -card2: rgba(255,255,255,0.060);
 
-       -card: rgba(255,255,255,0.045);
-       -card2: rgba(255,255,255,0.060);
+    -stroke: rgba(255,255,255,0.10);
+    -stroke2: rgba(255,255,255,0.16);
 
-       -stroke: rgba(255,255,255,0.10);
-       -stroke2: rgba(255,255,255,0.16);
+    -text: #eef7ff;
+    -muted: rgba(238,247,255,0.72);
+    -muted2: rgba(238,247,255,0.52);
 
-       -text: #eef7ff;
-       -muted: rgba(238,247,255,0.72);
-       -muted2: rgba(238,247,255,0.52);
+    /* Accents */
+    -acc:  #00ffff;     /* Hauptcyan */
+    -acc2: #22e6ff;     /* leicht dunkler */
+    -accHi: #4fffff;    /* Hover/Glow */
+    -ok:   #00ffff;
+    -busy: #31e3c1;
+    -danger: #ff4d4d;
+    -warn: #ffc878;
 
-       /* Nexo-like accents: violet -> cyan */
-       -acc:  #00ffff;     /* Hauptcyan */
-       -acc2: #22e6ff;     /* leicht dunkler */
-       -accHi: #4fffff;    /* Hover/Glow */
-       -ok:   #00ffff;
-       -busy: #31e3c1;
-       -danger: #ff4d4d;
-       -warn: #ffc878;
+    /* (Fix) Aliases: du hattest -accA/-accB benutzt, aber nie definiert */
+    -accA: -acc;
+    -accB: -acc2;
+    -accAHi: -accHi;
+    -accBHi: -accHi;
 
-       /* Gradient-mesh background (multiple layers) */
-       -fx-background-color:
-               radial-gradient(center 72% 18%, radius 65%, rgba(0,255,255,0.16), transparent 62%),
-               radial-gradient(center 18% 70%, radius 75%, rgba(0,255,255,0.08), transparent 64%),
-               linear-gradient(to bottom, -bg0, -bg1);
-   }
+    /* Background */
+    -fx-background-color:
+            radial-gradient(center 72% 18%, radius 65%, rgba(0,255,255,0.16), transparent 62%),
+            radial-gradient(center 18% 70%, radius 75%, rgba(0,255,255,0.08), transparent 64%),
+            linear-gradient(to bottom, -bg0, -bg1);
+}
 
 /* ===== Typography ===== */
 .h1 {
@@ -77,26 +82,11 @@
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.28), 18, 0.35, 0, 8);
 }
 
-       /* ===== Global cyan hover for ALL buttons ===== */
-       .button:hover{
-           -fx-border-color: rgba(0,255,255,0.55);
-           -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.18), 16, 0.30, 0, 0);
-       }
-
-       /* Neutral buttons become slightly cyan-tinted on hover */
-       .secondary:hover,
-       .ghost:hover{
-           -fx-background-color: rgba(0,255,255,0.10);
-           -fx-border-color: rgba(0,255,255,0.35);
-       }
-
-       /* Danger stays danger (nicht cyan überschreiben) */
-       .ghostDanger:hover{
-           -fx-background-color: rgba(255,120,120,0.18);
-           -fx-border-color: rgba(255,120,120,0.32);
-           -fx-effect: dropshadow(gaussian, rgba(255,120,120,0.14), 16, 0.30, 0, 0);
-       }
-
+.card.mainCard{
+    -fx-background-color: rgba(255,255,255,0.055);
+    -fx-border-color: rgba(0,255,255,0.18);
+    -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.07), 22, 0.35, 0, 10);
+}
 
 /* ===== Focus colors ===== */
 .text-field, .combo-box, .button, .progress-bar, .text-area {
@@ -118,25 +108,23 @@
 
     -fx-padding: 10 12 10 12;
 }
-       /* ComboBox: Text darf nicht geclippt werden */
-       .combo-box-base {
-           -fx-padding: 0 12 0 12;     /* statt 10 12 10 12 */
-       }
 
-       /* ButtonCell + ListCell sauber zentrieren */
-       .combo-box .list-cell {
-           -fx-padding: 0 10 0 10;
-           -fx-alignment: CENTER_LEFT;
-       }
+/* ComboBox: Text darf nicht geclippt werden */
+.combo-box-base {
+    -fx-padding: 0 12 0 12;
+}
 
-       .combo-box-base, .combo-box {
-           -fx-min-height: 40px;
-       }
+/* ButtonCell + ListCell sauber zentrieren */
+.combo-box .list-cell {
+    -fx-padding: 0 10 0 10;
+    -fx-alignment: CENTER_LEFT;
+}
 
+.combo-box-base, .combo-box {
+    -fx-min-height: 40px;
+}
 
-
-
-       .text-field:hover, .combo-box-base:hover {
+.text-field:hover, .combo-box-base:hover {
     -fx-background-color: rgba(255,255,255,0.075);
     -fx-border-color: rgba(255,255,255,0.18);
 }
@@ -156,55 +144,52 @@
     -fx-font-size: 12px;
 }
 
-/* ===== Buttons ===== */
+/* ===== Buttons (stabil, kein Layout-wackeln) ===== */
 .button {
     -fx-min-height: 38px;
     -fx-padding: 10 14 10 14;
+
     -fx-background-radius: 12;
     -fx-border-radius: 12;
+
+    /* WICHTIG: Border immer vorhanden -> Hover ändert nur Farbe, keine Größe */
+    -fx-border-width: 1;
+    -fx-border-color: rgba(255,255,255,0.12);
+    -fx-background-insets: 0;
+    -fx-border-insets: 0;
+
     -fx-cursor: hand;
 }
+
 .button:pressed { -fx-scale-x: 0.98; -fx-scale-y: 0.98; }
 
 .actionButton { -fx-min-width: 140px; }
 
-       .primary{
-           -fx-background-color: linear-gradient(from 0% 50% to 100% 50%, -acc, -acc2);
-           -fx-text-fill: #001414;
-           -fx-font-weight: 900;
-       }
+/* Global cyan hover for ALL buttons */
+.button:hover{
+    -fx-border-color: rgba(0,255,255,0.55);
+    -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.18), 16, 0.30, 0, 0);
+}
 
-       .primary:hover,
-       .primaryBig:hover{
-           -fx-background-color: linear-gradient(
-                   from 0% 50% to 100% 50%,
-                   -accAHi,
-                   -accBHi
-           );
-           -fx-effect: dropshadow(
-                   gaussian,
-                   rgba(0,255,255,0.35),
-                   26,
-                   0.4,
-                   0,
-                   0
-           );
-       }
+/* Button variants */
+.primary{
+    -fx-background-color: linear-gradient(from 0% 50% to 100% 50%, -acc, -acc2);
+    -fx-text-fill: #001414;
+    -fx-font-weight: 900;
+}
 
+.primaryBig{
+    -fx-background-color: linear-gradient(from 0% 50% to 100% 50%, -acc, -acc2);
+    -fx-text-fill: #001414;
+    -fx-font-weight: 900;
+    -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.30), 22, 0.35, 0, 0);
+}
 
-
-
-       .primaryBig{
-           -fx-background-color: linear-gradient(
-                   from 0% 50% to 100% 50%,
-                   -accA,
-                   -accB
-           );
-           -fx-text-fill: #001414;
-           -fx-font-weight: 900;
-       }
-
-
+.primary:hover,
+.primaryBig:hover{
+    -fx-background-color: linear-gradient(from 0% 50% to 100% 50%, -accAHi, -accBHi);
+    -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.45), 28, 0.38, 0, 0);
+}
 
 .secondary {
     -fx-background-color: rgba(255,255,255,0.06);
@@ -212,8 +197,8 @@
     -fx-border-color: rgba(255,255,255,0.12);
 }
 .secondary:hover {
-    -fx-background-color: rgba(255,255,255,0.10);
-    -fx-border-color: rgba(255,255,255,0.20);
+    -fx-background-color: rgba(0,255,255,0.10);
+    -fx-border-color: rgba(0,255,255,0.35);
 }
 
 .ghost {
@@ -222,8 +207,8 @@
     -fx-border-color: rgba(255,255,255,0.10);
 }
 .ghost:hover {
-    -fx-background-color: rgba(255,255,255,0.08);
-    -fx-border-color: rgba(255,255,255,0.16);
+    -fx-background-color: rgba(0,255,255,0.10);
+    -fx-border-color: rgba(0,255,255,0.35);
 }
 
 .ghostDanger {
@@ -231,32 +216,36 @@
     -fx-text-fill: #ffb2b2;
     -fx-border-color: rgba(255,120,120,0.22);
 }
-.ghostDanger:hover {
+.ghostDanger:hover{
     -fx-background-color: rgba(255,120,120,0.18);
     -fx-border-color: rgba(255,120,120,0.32);
+    -fx-effect: dropshadow(gaussian, rgba(255,120,120,0.14), 16, 0.30, 0, 0);
 }
 
 /* ===== Status Pills ===== */
 .pillOk {
-    -fx-background-color: rgba(0,255,255,0.14);
-    -fx-text-fill: #bfffff;
-    -fx-border-color: rgba(0,255,255,0.32);
+    -fx-background-color: rgba(0,255,255,0.16);
+    -fx-text-fill: #cfffff;
+    -fx-border-color: rgba(0,255,255,0.35);
     -fx-padding: 6 10 6 10;
     -fx-background-radius: 999;
     -fx-border-radius: 999;
 }
-       .pillBusy{
-           -fx-background-color: rgba(0,255,255,0.10);
-           -fx-text-fill: #9ffcff;
-           -fx-border-color: rgba(0,255,255,0.22);
-       }
+.pillBusy{
+    -fx-background-color: rgba(0,255,255,0.10);
+    -fx-text-fill: #9ffcff;
+    -fx-border-color: rgba(0,255,255,0.22);
+}
 .pillError {
     -fx-background-color: rgba(255, 120, 120, 0.10);
     -fx-text-fill: #ffb2b2;
     -fx-border-color: rgba(255, 120, 120, 0.20);
+    -fx-padding: 6 10 6 10;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
 }
 
-/* ===== Icon Buttons ===== */
+/* ===== Icon Buttons (FIX: kein Scale auf Hover) ===== */
 .iconBtn {
     -fx-min-width: 34px;
     -fx-min-height: 34px;
@@ -271,21 +260,25 @@
     -fx-alignment: CENTER;
 
     -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-width: 1;
     -fx-border-color: rgba(255,255,255,0.12);
+
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.18), 10, 0.35, 0, 3);
     -fx-cursor: hand;
 }
-       .iconBtn:hover{
-           -fx-background-color: rgba(0,255,255,0.10);
-           -fx-border-color: rgba(0,255,255,0.45);
-           -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.18), 16, 0.30, 0, 0);
-           -fx-scale-x: 1.08;
-           -fx-scale-y: 1.08;
-       }
 
-
+.iconBtn:hover{
+    -fx-background-color: rgba(0,255,255,0.10);
+    -fx-border-color: rgba(0,255,255,0.45);
+    -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.18), 16, 0.30, 0, 0);
+    /* KEIN -fx-scale -> kein Layout shift */
+}
 
 .iconHint { -fx-text-fill: rgba(238,242,255,0.55); -fx-font-size: 10px; }
+
+.iconDelete{
+    -fx-fill: -danger;
+}
 
 /* ===== Progress ===== */
 .progressSlim {
@@ -299,11 +292,10 @@
     -fx-background-color: rgba(255,255,255,0.08);
     -fx-background-radius: 999;
 }
-       .progress-bar .bar{
-           -fx-background-radius: 999;
-           -fx-background-color: linear-gradient(from 0% 50% to 100% 50%, -acc, -acc2);
-       }
-
+.progress-bar .bar{
+    -fx-background-radius: 999;
+    -fx-background-color: linear-gradient(from 0% 50% to 100% 50%, -acc, -acc2);
+}
 
 /* ===== Tabs ===== */
 .tabs .tab-header-area .tab-header-background {
@@ -315,6 +307,7 @@
 .tabs .tab {
     -fx-background-color: rgba(255,255,255,0.04);
     -fx-background-radius: 12;
+    -fx-border-width: 1;
     -fx-border-color: rgba(255,255,255,0.10);
     -fx-border-radius: 12;
     -fx-padding: 6 12 6 12;
@@ -322,15 +315,13 @@
 .tabs .tab:hover {
     -fx-background-color: rgba(255,255,255,0.07);
 }
-       .tabs .tab:selected{
-           -fx-background-color: rgba(255,255,255,0.09);
-           -fx-border-color: rgba(0,255,255,0.45);
-       }
-
-       .tabs .tab:selected .tab-label{
-           -fx-text-fill: #eaffff;
-       }
-
+.tabs .tab:selected{
+    -fx-background-color: rgba(255,255,255,0.09);
+    -fx-border-color: rgba(0,255,255,0.55);
+}
+.tabs .tab:selected .tab-label{
+    -fx-text-fill: #eaffff;
+}
 
 /* ===== SplitPane ===== */
 .mainSplit { -fx-background-color: transparent; }
@@ -344,6 +335,7 @@
     -fx-background-color: rgba(255,255,255,0.04);
     -fx-background-radius: 12;
     -fx-border-radius: 12;
+    -fx-border-width: 1;
     -fx-border-color: rgba(255,255,255,0.10);
 }
 .titledCard > *.content { -fx-background-color: transparent; }
@@ -363,41 +355,3 @@
     -fx-padding: 0;
     -fx-background-color: transparent;
 }
-
-       .card.mainCard{
-           -fx-background-color: rgba(255,255,255,0.055);
-           -fx-border-color: rgba(0,255,255,0.18);
-           -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.07), 22, 0.35, 0, 10);
-       }
-
-
-
-       /* Selected Tab -> klar cyan */
-       .tabs .tab:selected{
-           -fx-border-color: rgba(0,255,255,0.55);
-           -fx-background-color: rgba(255,255,255,0.09);
-       }
-       .tabs .tab:selected .tab-label{
-           -fx-text-fill: #eaffff;
-       }
-
-       /* Live/Status pills -> cyan sichtbarer */
-       .pillOk{
-           -fx-background-color: rgba(0,255,255,0.16);
-           -fx-border-color: rgba(0,255,255,0.35);
-           -fx-text-fill: #cfffff;
-       }
-
-       /* Primary (Start) -> mehr “neon” */
-       .primaryBig{
-           -fx-background-color: linear-gradient(from 0% 50% to 100% 50%, -acc, -acc2);
-           -fx-text-fill: #001414;
-           -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.30), 22, 0.35, 0, 0);
-       }
-       .primaryBig:hover{
-           -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.45), 28, 0.38, 0, 0);
-       }
-       .iconDelete{
-           -fx-fill: -danger;
-       }
-
