@@ -1,12 +1,17 @@
 package de.levingamer8.modlauncher.host;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import de.levingamer8.modlauncher.core.LoaderType;
+import de.levingamer8.modlauncher.core.ManifestModels;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record HostProjectConfig(
         String projectId,
-        String name,
+        String projectName,
         String mcVersion,
-        LoaderType loader,
-        String loaderVersion,
-        boolean allowClientMods // TODO: später sauber regeln (optional mods, whitelist, etc.)
+        ManifestModels.Loader loader,
+        String serverIP,
+        int serverPort,
+        boolean allowClientMods,
+        boolean onlySelectedServer
 ) {}

@@ -8,10 +8,7 @@ import de.levingamer8.modlauncher.core.PackUpdater;
 import de.levingamer8.modlauncher.core.ProfileStore;
 import de.levingamer8.modlauncher.core.ProfileStore.Profile;
 import de.levingamer8.modlauncher.core.LoaderType;
-import de.levingamer8.modlauncher.host.CreateHostProjectRequest;
-import de.levingamer8.modlauncher.host.HostManifestGenerator;
-import de.levingamer8.modlauncher.host.HostProjectCreator;
-import de.levingamer8.modlauncher.host.LatestPointer;
+import de.levingamer8.modlauncher.host.*;
 import de.levingamer8.modlauncher.host.modrinth.ModrinthClient;
 import de.levingamer8.modlauncher.host.modrinth.SearchHit;
 import de.levingamer8.modlauncher.host.modrinth.Version;
@@ -21,6 +18,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.nio.file.Path;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 
 import de.levingamer8.modlauncher.mc.PlaytimeStore;
 import de.levingamer8.modlauncher.update.UpdateController;
@@ -46,13 +47,15 @@ import javafx.stage.Modality;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
+import javafx.stage.FileChooser;
+
 
 import de.levingamer8.modlauncher.ui.dialogs.LauncherSettings;
 
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TitledPane;
 
-
+import java.util.List;
 import java.util.Locale;
 import java.util.ResourceBundle;
 import java.util.concurrent.*;
@@ -113,6 +116,9 @@ public class Controller {
     private boolean uiBusy = false;
 
     private record NewProfileData(String name, String manifestUrl) {}
+
+    private record VersionsPointer(String version, String manifestUrl) {}
+
 
     private final java.util.concurrent.ConcurrentHashMap<String, Image> iconCache = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.net.http.HttpClient iconHttp = java.net.http.HttpClient.newBuilder()
@@ -859,8 +865,6 @@ public class Controller {
                         msg -> appendLog(msg)
                 );
 
-
-
                 Platform.runLater(() -> {
                     setStatus("Beendet", "pillOk");
 
@@ -876,9 +880,6 @@ public class Controller {
                 updateMessage("MC beendet.");
                 return null;
             }
-
-
-
         };
 
         statusLabel.textProperty().bind(task.messageProperty());
@@ -1265,21 +1266,63 @@ public class Controller {
                 .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
                 .build();
 
-        if (url.endsWith("latest.json")) {
-            var req1 = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).GET().build();
+        String u = url.trim();
+
+        // 1) latest.json -> manifestUrl
+        if (u.endsWith("latest.json")) {
+            var req1 = java.net.http.HttpRequest.newBuilder(java.net.URI.create(u)).GET().build();
             var resp1 = client.send(req1, java.net.http.HttpResponse.BodyHandlers.ofString());
             if (resp1.statusCode() != 200) throw new RuntimeException("latest HTTP " + resp1.statusCode());
 
             LatestPointer latest = om.readValue(resp1.body(), LatestPointer.class);
-            url = latest.manifestUrl();
+            u = latest.manifestUrl();
         }
 
-        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url)).GET().build();
+        // 2) project.json -> versions.json -> latest manifestUrl
+        if (u.endsWith("project.json")) {
+            // project.json laden (optional – du brauchst es hier nicht zwingend zum Update)
+            var reqP = java.net.http.HttpRequest.newBuilder(java.net.URI.create(u)).GET().build();
+            var respP = client.send(reqP, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (respP.statusCode() != 200) throw new RuntimeException("project HTTP " + respP.statusCode());
+
+            // versions.json URL (neben project.json)
+            String versionsUrl = java.net.URI.create(u).resolve("versions.json").toString();
+
+            var reqV = java.net.http.HttpRequest.newBuilder(java.net.URI.create(versionsUrl)).GET().build();
+            var respV = client.send(reqV, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (respV.statusCode() != 200) throw new RuntimeException("versions HTTP " + respV.statusCode());
+
+            VersionsIndex vi = om.readValue(respV.body(), VersionsIndex.class);
+            String manifestUrl = vi.latestManifestUrl();
+            if (manifestUrl == null || manifestUrl.isBlank())
+                throw new IllegalStateException("versions.json hat keine manifestUrl");
+
+            u = manifestUrl;
+        }
+
+        // 3) versions.json direkt -> latest manifestUrl
+        if (u.endsWith("versions.json")) {
+            var reqV = java.net.http.HttpRequest.newBuilder(java.net.URI.create(u)).GET().build();
+            var respV = client.send(reqV, java.net.http.HttpResponse.BodyHandlers.ofString());
+            if (respV.statusCode() != 200) throw new RuntimeException("versions HTTP " + respV.statusCode());
+
+            VersionsIndex vi = om.readValue(respV.body(), VersionsIndex.class);
+            String manifestUrl = vi.latestManifestUrl();
+            if (manifestUrl == null || manifestUrl.isBlank())
+                throw new IllegalStateException("versions.json hat keine manifestUrl");
+
+            u = manifestUrl;
+        }
+
+        // 4) manifest laden
+        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(u)).GET().build();
         var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() != 200) throw new RuntimeException("Manifest HTTP " + resp.statusCode());
 
         return om.readValue(resp.body(), ManifestModels.Manifest.class);
     }
+
+
 
     private String loadTextFromUrl(String url) throws Exception {
         var client = java.net.http.HttpClient.newBuilder()
@@ -1305,10 +1348,28 @@ public class Controller {
         return java.net.URI.create(base).resolve(s).toString();
     }
 
-    // -------------------- Host Mode (unchanged) --------------------
+    // -------------------- Host Mode (AUTO MC + AUTO Loader Versions) --------------------
 
     @FXML
     public void onHostMode() {
+
+        ChoiceDialog<String> mode = new ChoiceDialog<>("Neues Pack erstellen",
+                "Neues Pack erstellen", "Bestehendes Pack bearbeiten");
+        mode.setTitle("Host Mode");
+        mode.setHeaderText(null);
+        mode.setContentText("Was willst du machen?");
+
+        String choice = mode.showAndWait().orElse(null);
+        if (choice == null) return;
+
+        boolean editMode = choice.equals("Bestehendes Pack bearbeiten");
+
+        if (editMode) {
+            openExistingHostProject();   // <<< NEU
+            return;
+        }
+
+
         Dialog<CreateHostProjectRequest> d = new Dialog<>();
         d.setTitle("Projekt hosten");
         d.setHeaderText(null);
@@ -1323,13 +1384,23 @@ public class Controller {
 
         TextField projectId = new TextField("testpack");
         TextField name = new TextField("Test Pack");
-        TextField mcVersion = new TextField("1.20.1");
+
+        // MC Version: editable ComboBox + async Release-Versionen
+        ComboBox<String> mcVersion = new ComboBox<>();
+        mcVersion.setEditable(true);
+        mcVersion.getEditor().setText("1.20.1");
+        mcVersion.setPrefWidth(220);
 
         ComboBox<de.levingamer8.modlauncher.core.LoaderType> loader = new ComboBox<>();
         loader.getItems().setAll(de.levingamer8.modlauncher.core.LoaderType.values());
         loader.getSelectionModel().select(de.levingamer8.modlauncher.core.LoaderType.FABRIC);
 
-        TextField loaderVersion = new TextField("0.15.11");
+        // Loader Version: editable ComboBox + auto passend
+        ComboBox<String> loaderVersion = new ComboBox<>();
+        loaderVersion.setEditable(true);
+        loaderVersion.setPromptText("z.B. 0.15.11 / 47.3.0");
+        loaderVersion.setPrefWidth(220);
+
         TextField baseUrl = new TextField("https://mc.local/testpack/");
         TextField initialVersion = new TextField("1.0.0");
 
@@ -1357,17 +1428,65 @@ public class Controller {
 
         d.getDialogPane().setContent(gp);
 
-        loader.valueProperty().addListener((obs, o, n) -> {
-            boolean vanilla = (n == de.levingamer8.modlauncher.core.LoaderType.VANILLA);
-            loaderVersion.setDisable(vanilla);
-            if (vanilla) loaderVersion.setText("");
+        // MC Release-Versionen laden (nicht blocken)
+        Task<List<String>> mcLoad = new Task<>() {
+            @Override protected List<String> call() {
+                return resolveMinecraftReleaseVersions();
+            }
+        };
+        mcLoad.setOnSucceeded(ev -> {
+            List<String> list = mcLoad.getValue();
+            if (list != null && !list.isEmpty()) {
+                String keep = mcVersion.getEditor().getText();
+                mcVersion.getItems().setAll(list);
+                if (keep != null && !keep.isBlank()) mcVersion.getEditor().setText(keep);
+            }
         });
+        mcLoad.setOnFailed(ev -> {
+            if (mcVersion.getItems().isEmpty()) {
+                mcVersion.getItems().setAll(List.of("1.21.4", "1.21.3", "1.21.2", "1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.1"));
+            }
+        });
+        Thread th = new Thread(mcLoad, "mc-versions");
+        th.setDaemon(true);
+        th.start();
+
+        Runnable refreshLoaderVersions = () -> {
+            de.levingamer8.modlauncher.core.LoaderType lt = loader.getValue();
+            boolean vanilla = (lt == de.levingamer8.modlauncher.core.LoaderType.VANILLA);
+
+            loaderVersion.setDisable(vanilla);
+            loaderVersion.setOpacity(vanilla ? 0.55 : 1.0);
+
+            if (vanilla) {
+                loaderVersion.getItems().clear();
+                loaderVersion.getEditor().setText("");
+                return;
+            }
+
+            String mc = mcVersion.getEditor().getText() == null ? "" : mcVersion.getEditor().getText().trim();
+            if (mc.isEmpty()) return;
+
+            List<String> versions = resolveKnownLoaderVersions(mc, lt);
+            loaderVersion.getItems().setAll(versions);
+
+            String current = loaderVersion.getEditor().getText() == null ? "" : loaderVersion.getEditor().getText().trim();
+            if (current.isEmpty() || (!versions.isEmpty() && versions.stream().noneMatch(v -> v.equalsIgnoreCase(current)))) {
+                if (!versions.isEmpty()) loaderVersion.getEditor().setText(versions.get(0));
+            }
+        };
+
+        loader.valueProperty().addListener((obs, o, n) -> refreshLoaderVersions.run());
+        mcVersion.getEditor().textProperty().addListener((obs, o, n) -> refreshLoaderVersions.run());
+
+        // initial
+        refreshLoaderVersions.run();
 
         Node createNode = d.getDialogPane().lookupButton(createBtn);
         createNode.disableProperty().bind(
                 projectId.textProperty().isEmpty()
                         .or(name.textProperty().isEmpty())
-                        .or(mcVersion.textProperty().isEmpty())
+                        .or(mcVersion.getEditor().textProperty().isEmpty())
                         .or(baseUrl.textProperty().isEmpty())
                         .or(outFolder.textProperty().isEmpty())
                         .or(initialVersion.textProperty().isEmpty())
@@ -1378,9 +1497,9 @@ public class Controller {
             return new CreateHostProjectRequest(
                     projectId.getText().trim().toLowerCase(Locale.ROOT),
                     name.getText().trim(),
-                    mcVersion.getText().trim(),
+                    mcVersion.getEditor().getText().trim(),
                     loader.getValue(),
-                    loaderVersion.getText().trim(),
+                    loaderVersion.getEditor().getText().trim(),
                     initialVersion.getText().trim(),
                     baseUrl.getText().trim(),
                     Path.of(outFolder.getText().trim())
@@ -1397,7 +1516,7 @@ public class Controller {
             openModrinthSearchAndAdd(req.mcVersion(), req.loader(), modsDir);
 
             appendLog("[HOST] Projekt erstellt: " + paths.projectRoot());
-            appendLog("[HOST] latest: " + paths.latestJson());
+            appendLog("[HOST] project: " + paths.projectJson());
             appendLog("[HOST] manifest: " + paths.manifestJson());
 
             if (Desktop.isDesktopSupported()) {
@@ -1407,6 +1526,79 @@ public class Controller {
             showError("Host-Projekt konnte nicht erstellt werden:\n" + ex.getMessage());
         }
     }
+
+    private void openExistingHostProject() {
+        // project.json auswählen
+        javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
+        fc.setTitle("project.json auswählen");
+        fc.getExtensionFilters().add(
+                new javafx.stage.FileChooser.ExtensionFilter("project.json", "project.json")
+        );
+
+        java.io.File f = fc.showOpenDialog(profileCombo.getScene().getWindow());
+        if (f == null) return;
+
+        try {
+            var om = new com.fasterxml.jackson.databind.ObjectMapper();
+
+            // 1) project.json lesen
+            HostProjectConfig cfg = om.readValue(f, HostProjectConfig.class);
+
+            java.nio.file.Path projectJson = f.toPath();
+            java.nio.file.Path root = projectJson.getParent();
+
+            // 2) versions.json lesen (liegt neben project.json)
+            java.nio.file.Path versionsJson = root.resolve("versions.json");
+            if (!java.nio.file.Files.exists(versionsJson)) {
+                showError("versions.json fehlt neben project.json:\n" + versionsJson);
+                return;
+            }
+
+            VersionsIndex idx = om.readValue(versionsJson.toFile(), VersionsIndex.class);
+
+            String latest = idx.latestVersion();
+            String latestManifestUrl = idx.latestManifestUrl();
+
+            if (latest == null || latest.isBlank() || latestManifestUrl == null || latestManifestUrl.isBlank()) {
+                showError("versions.json ist kaputt: keine latest Version / manifestUrl gefunden.");
+                return;
+            }
+
+            // Optional: Eintrag zur Log-Ausgabe finden
+            VersionsIndex.VersionEntry ve = null;
+            if (idx.versions() != null) {
+                for (var e : idx.versions()) {
+                    if (e != null && latest.equalsIgnoreCase(e.version())) {
+                        ve = e;
+                        break;
+                    }
+                }
+            }
+
+            // 3) modsDir ableiten: <root>/versions/<version>/files/mods
+            java.nio.file.Path modsDir = root.resolve("versions")
+                    .resolve(latest)
+                    .resolve("files")
+                    .resolve("mods");
+
+            java.nio.file.Files.createDirectories(modsDir);
+
+            // 4) Modrinth-Dialog öffnen
+            LoaderType lt = LoaderType.fromString(cfg.loader().type()); // cfg.loader() muss {type,version} liefern
+            openModrinthSearchAndAdd(cfg.mcVersion(), lt, modsDir);
+
+            appendLog("[HOST] Projekt geladen: " + cfg.projectId());
+            appendLog("[HOST] Latest: " + latest + " -> " + (ve != null ? ve.manifestUrl() : latestManifestUrl));
+
+            if (java.awt.Desktop.isDesktopSupported()) {
+                java.awt.Desktop.getDesktop().open(root.toFile());
+            }
+        } catch (Exception ex) {
+            showError("Konnte Projekt nicht laden:\n" + ex.getMessage());
+        }
+    }
+
+
 
     public void openModrinthSearchAndAdd(String mcVersion, LoaderType loaderType, Path modsDir) {
         if (loaderType == LoaderType.VANILLA) {
@@ -1591,9 +1783,9 @@ public class Controller {
                 showError("Modrinth Suche fehlgeschlagen:\n" + (ex == null ? "unknown" : ex.getMessage()));
             });
 
-            Thread th = new Thread(t, "modrinth-search");
-            th.setDaemon(true);
-            th.start();
+            Thread th2 = new Thread(t, "modrinth-search");
+            th2.setDaemon(true);
+            th2.start();
         };
 
         searchBtn.setOnAction(e -> doSearch.accept(0));
@@ -1638,9 +1830,9 @@ public class Controller {
                 showError("Manifest Generierung fehlgeschlagen:\n" + (ex == null ? "unknown" : ex.getMessage()));
             });
 
-            Thread th = new Thread(gen, "host-manifest-gen");
-            th.setDaemon(true);
-            th.start();
+            Thread th2 = new Thread(gen, "host-manifest-gen");
+            th2.setDaemon(true);
+            th2.start();
         });
 
         addBtn.setOnAction(e -> {
@@ -1687,9 +1879,9 @@ public class Controller {
                             + (ex == null ? "unknown" : ex.getMessage()));
                 });
 
-                Thread th2 = new Thread(gen, "host-manifest-gen");
-                th2.setDaemon(true);
-                th2.start();
+                Thread th3 = new Thread(gen, "host-manifest-gen");
+                th3.setDaemon(true);
+                th3.start();
             });
 
             t.setOnFailed(ev -> {
@@ -1700,9 +1892,9 @@ public class Controller {
                 showError("Mod hinzufügen fehlgeschlagen:\n" + (ex == null ? "unknown" : ex.getMessage()));
             });
 
-            Thread th = new Thread(t, "modrinth-add");
-            th.setDaemon(true);
-            th.start();
+            Thread th2 = new Thread(t, "modrinth-add");
+            th2.setDaemon(true);
+            th2.start();
         });
 
         dialog.showAndWait();
@@ -1756,9 +1948,9 @@ public class Controller {
             }
         });
 
-        Thread th = new Thread(t, "modrinth-icon");
-        th.setDaemon(true);
-        th.start();
+        Thread th2 = new Thread(t, "modrinth-icon");
+        th2.setDaemon(true);
+        th2.start();
     }
 
 
@@ -1780,12 +1972,13 @@ public class Controller {
         int port = p.serverPort();
 
         if (host.isEmpty()) {
-            setServerUiUnknown("Kein Server-H ost gesetzt (Profil bearbeiten).");
+            setServerUiUnknown("Kein Server-Host gesetzt (Profil bearbeiten).");
             return;
         }
         if (port <= 0 || port > 65535) port = 25565;
 
-        pollServerOnce(host, port);
+        int finalPort1 = port;
+        serverPollExec.execute(() -> pollServerOnce(host, finalPort1));
 
         //TODO: whats is performance? ping every 30 seconds
         final String finalHost = host;
@@ -1797,6 +1990,11 @@ public class Controller {
     }
 
     private void pollServerOnce(String host, int port) {
+        // Niemals Netzwerk im JavaFX Thread machen
+        if (Platform.isFxApplicationThread()) {
+            serverPollExec.execute(() -> pollServerOnce(host, port));
+            return;
+        }
         // Timeout klein halten, sonst fühlt sich UI "laggy" an
         MinecraftServerPing.Result r = MinecraftServerPing.ping(host, port, 1500);
 
@@ -1850,6 +2048,158 @@ public class Controller {
             if (serverDetailsLabel != null) serverDetailsLabel.setText(msg);
         });
     }
+
+    // -------------------- Host Mode helper: MC + Loader versions (NO extra libs needed) --------------------
+
+    private static List<String> resolveMinecraftReleaseVersions() {
+        // Mojang/Piston Meta version manifest (release only)
+        String url = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+        try {
+            String json = httpGet(url);
+
+            java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                    "\\\"id\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"\\s*,\\s*\\\"type\\\"\\s*:\\s*\\\"release\\\""
+            );
+            java.util.regex.Matcher m = p.matcher(json);
+            while (m.find()) {
+                out.add(m.group(1));
+                if (out.size() >= 120) break;
+            }
+            return new java.util.ArrayList<>(out);
+        } catch (Exception e) {
+            return List.of("1.21.4", "1.21.3", "1.21.2", "1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.1");
+        }
+    }
+
+    private static List<String> resolveKnownLoaderVersions(String mcVersion, de.levingamer8.modlauncher.core.LoaderType lt) {
+        try {
+            return switch (lt) {
+                case FABRIC -> resolveFabricLoaderVersions(mcVersion);
+                case QUILT -> resolveQuiltLoaderVersions(mcVersion);
+                case FORGE -> resolveForgePromotedVersions(mcVersion);
+                case NEOFORGE -> List.of(); // erstmal leer, sonst trägt man schnell Müll ein
+                case VANILLA -> List.of();
+            };
+        } catch (Exception ignored) {
+        }
+
+        // offline fallback
+        return switch (lt) {
+            case FABRIC -> List.of("0.15.11", "0.15.10", "0.15.9");
+            case FORGE -> mcVersion.equals("1.20.1")
+                    ? List.of("47.3.0", "47.2.0", "47.1.0")
+                    : List.of();
+            case QUILT -> List.of("0.26.0");
+            default -> List.of();
+        };
+    }
+
+    private static List<String> resolveFabricLoaderVersions(String mcVersion) throws Exception {
+        String url = "https://meta.fabricmc.net/v2/versions/loader/" + mcVersion;
+        String json = httpGet(url);
+
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "\\\"loader\\\"\\s*:\\s*\\{[^}]*?\\\"version\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"",
+                java.util.regex.Pattern.DOTALL
+        );
+        java.util.regex.Matcher m = p.matcher(json);
+        while (m.find()) {
+            out.add(m.group(1));
+            if (out.size() >= 30) break;
+        }
+        return new java.util.ArrayList<>(out);
+    }
+
+    private static List<String> resolveQuiltLoaderVersions(String mcVersion) throws Exception {
+        String url = "https://meta.quiltmc.org/v3/versions/loader/" + mcVersion;
+        String json = httpGet(url);
+
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
+                "\\\"loader_version\\\"\\s*:\\s*\\\"([^\\\"]+)\\\""
+        );
+        java.util.regex.Matcher m = p.matcher(json);
+        while (m.find()) {
+            out.add(m.group(1));
+            if (out.size() >= 30) break;
+        }
+        return new java.util.ArrayList<>(out);
+    }
+
+    private static List<String> resolveForgePromotedVersions(String mcVersion) throws Exception {
+        String url = "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
+        String json = httpGet(url);
+
+        String recommended = extractJsonValueForKey(json, mcVersion + "-recommended");
+        String latest = extractJsonValueForKey(json, mcVersion + "-latest");
+
+        if (recommended != null && latest != null && !recommended.equals(latest)) return List.of(recommended, latest);
+        if (recommended != null) return List.of(recommended);
+        if (latest != null) return List.of(latest);
+        return List.of();
+    }
+
+    private static String extractJsonValueForKey(String json, String key) {
+        String needle = "\"" + key + "\":";
+        int i = json.indexOf(needle);
+        if (i < 0) return null;
+
+        int start = json.indexOf('"', i + needle.length());
+        if (start < 0) return null;
+
+        int end = json.indexOf('"', start + 1);
+        if (end < 0) return null;
+
+        return json.substring(start + 1, end).trim();
+    }
+
+    private static String httpGet(String url) throws Exception {
+        HttpClient client = HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(java.time.Duration.ofSeconds(4))
+                .build();
+
+        HttpRequest req = HttpRequest.newBuilder(URI.create(url))
+                .timeout(java.time.Duration.ofSeconds(8))
+                .header("User-Agent", "ModLauncher/1.0")
+                .GET()
+                .build();
+
+        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+            throw new RuntimeException("HTTP " + resp.statusCode() + " for " + url);
+        }
+        return resp.body();
+    }
+
+
+    private static int compareVersions(String a, String b) {
+        int[] pa = parseVersion(a);
+        int[] pb = parseVersion(b);
+        for (int i = 0; i < Math.max(pa.length, pb.length); i++) {
+            int va = i < pa.length ? pa[i] : 0;
+            int vb = i < pb.length ? pb[i] : 0;
+            if (va != vb) return Integer.compare(va, vb);
+        }
+        return a.compareToIgnoreCase(b);
+    }
+
+    private static int[] parseVersion(String s) {
+        if (s == null) return new int[]{0};
+        String[] parts = s.trim().split("[^0-9]+"); // alles was kein digit ist trennt
+        java.util.ArrayList<Integer> out = new java.util.ArrayList<>();
+        for (String p : parts) {
+            if (p.isBlank()) continue;
+            try { out.add(Integer.parseInt(p)); } catch (Exception ignored) {}
+        }
+        if (out.isEmpty()) return new int[]{0};
+        int[] arr = new int[out.size()];
+        for (int i = 0; i < out.size(); i++) arr[i] = out.get(i);
+        return arr;
+    }
+
 
 
 }

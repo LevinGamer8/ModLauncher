@@ -8,8 +8,8 @@ public enum LoaderType {
         return switch (s.trim().toLowerCase()) {
             case "fabric" -> FABRIC;
             case "forge"  -> FORGE;
-            case "neoforge"  -> FORGE;
-            case "quilt"  -> FORGE;
+            case "neoforge" -> NEOFORGE;
+            case "quilt"    -> QUILT;
             default -> VANILLA;
         };
     }

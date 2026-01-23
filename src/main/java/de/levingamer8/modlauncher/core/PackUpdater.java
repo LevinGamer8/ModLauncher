@@ -2,6 +2,7 @@ package de.levingamer8.modlauncher.core;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import de.levingamer8.modlauncher.core.ManifestModels.*;
+import de.levingamer8.modlauncher.host.VersionsIndex;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
@@ -29,12 +30,21 @@ public class PackUpdater {
                        Consumer<String> log,
                        BiConsumer<Long, Long> progress) throws Exception {
 
-        String manifestUrl = profile.manifestUrl();
+        String entryUrl = profile.manifestUrl();
+        String baseUrl = toBaseUrl(entryUrl);
+
+        VersionsIndex idx = fetchVersions(baseUrl + "/versions.json");
+        String manifestUrl = idx.latestManifestUrl();
+        if (manifestUrl == null || manifestUrl.isBlank()) {
+            throw new IllegalStateException("versions.json hat keine manifestUrl (baseUrl=" + baseUrl + ")");
+        }
+
         log.accept("Manifest laden: " + manifestUrl);
 
         Manifest manifest = fetchManifest(manifestUrl);
+
         if (manifest.packId() == null || manifest.packId().isBlank()) {
-            throw new IllegalArgumentException("manifest.packId fehlt");
+            throw new IllegalArgumentException("manifest.packId fehlt (URL=" + manifestUrl + ")");
         }
 
         // Instanzordner wird am Profilnamen festgemacht (nicht packId), damit du Profile umbenennen kannst, wenn du willst.
@@ -111,9 +121,6 @@ public class PackUpdater {
             deleteUnmanagedFiles(installDir, expected, log);
 
 
-
-
-
             // Schritt 3: overrides.zip (configs usw.)
             if (manifest.overrides() != null && manifest.overrides().url() != null && !manifest.overrides().url().isBlank()) {
                 done++;
@@ -160,6 +167,29 @@ public class PackUpdater {
         return manifest.files().stream()
                 .map(f -> f.path().replace('\\', '/'))
                 .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private String toBaseUrl(String entryUrl) {
+        // akzeptiert:
+        // - .../project.json
+        // - .../versions.json
+        // - .../versions/<v>/manifest.json
+        String u = entryUrl;
+        u = u.replaceAll("/+$", "");
+
+        if (u.endsWith("/project.json")) return u.substring(0, u.length() - "/project.json".length());
+        if (u.endsWith("/versions.json")) return u.substring(0, u.length() - "/versions.json".length());
+
+        int i = u.indexOf("/versions/");
+        if (i >= 0) return u.substring(0, i);
+
+        // fallback: wenn jemand nur baseUrl gespeichert hat
+        return u;
+    }
+
+    private VersionsIndex fetchVersions(String url) throws IOException, InterruptedException {
+        String json = http.getText(url);
+        return om.readValue(json, VersionsIndex.class);
     }
 
 

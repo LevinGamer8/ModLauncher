@@ -23,30 +23,31 @@ public final class LibraryService {
     public List<Path> ensureClasspath(Path sharedRoot, JsonObject versionJson) throws Exception {
         List<Path> cp = new ArrayList<>();
 
-        String id = versionJson.get("id").getAsString();
+        String id = versionJson.has("id") ? versionJson.get("id").getAsString() : null;
+        if (id == null || id.isBlank()) {
+            throw new IllegalStateException("Version JSON hat kein 'id'");
+        }
 
-// Basis-Version bestimmen (Vanilla), niemals Wrapper
         String baseId = null;
 
         if (versionJson.has("inheritsFrom")) baseId = versionJson.get("inheritsFrom").getAsString();
         if ((baseId == null || baseId.isBlank()) && versionJson.has("jar")) baseId = versionJson.get("jar").getAsString();
 
         if (baseId == null || baseId.isBlank()) {
-            // Fallback: aus "1.20.1-forge-47.4.10" -> "1.20.1"
             int idx = id.indexOf("-forge-");
             if (idx > 0) baseId = id.substring(0, idx);
 
-            // Fabric: "fabric-loader-0.xx-1.20.1" -> base aus inheritsFrom kommt normalerweise,
-            // aber falls nicht: letzte "-" getrennte Komponente
-            if (baseId == null && id.startsWith("fabric-loader-")) {
+            if ((baseId == null || baseId.isBlank()) && id.startsWith("fabric-loader-")) {
                 int lastDash = id.lastIndexOf('-');
                 if (lastDash > 0 && lastDash + 1 < id.length()) baseId = id.substring(lastDash + 1);
             }
         }
 
+// ✅ VANILLA
         if (baseId == null || baseId.isBlank()) {
-            throw new IllegalStateException("Kann baseId nicht bestimmen für: " + id + " (kein inheritsFrom/jar und keine ableitbare base)");
+            baseId = id;
         }
+
 
 // Sicherstellen, dass Vanilla-JAR existiert
         mojang.ensureClientJar(sharedRoot, baseId);

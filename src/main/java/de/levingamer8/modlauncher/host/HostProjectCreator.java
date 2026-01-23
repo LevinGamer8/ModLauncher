@@ -2,136 +2,109 @@ package de.levingamer8.modlauncher.host;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import de.levingamer8.modlauncher.core.LoaderType;
 import de.levingamer8.modlauncher.core.ManifestModels;
 
-import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
 
 public class HostProjectCreator {
 
-    private static final Pattern PROJECT_ID = Pattern.compile("^[a-z0-9][a-z0-9_-]{1,31}$"); // 2..32 chars
-    private final ObjectMapper om;
+    private final ObjectMapper om = new ObjectMapper()
+            .enable(SerializationFeature.INDENT_OUTPUT);
 
-    public HostProjectCreator() {
-        this.om = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
-    }
+    public HostProjectPaths create(CreateHostProjectRequest req) throws Exception {
 
-    public record Manifest(
-            String packId,
-            String packName,
-            int packVersion,
-            String minecraft,
-            ManifestModels.Loader loader,
-            String baseUrl,
-            List<ManifestModels.ManifestFile> files,
-            ManifestModels.Overrides overrides
-    ) {}
+        // -------- Root --------
+        Path root = req.outputFolder().resolve(req.projectId());
+        Files.createDirectories(root);
 
+        // -------- Version --------
+        String version = req.initialVersion();
 
-    public HostProjectPaths create(CreateHostProjectRequest req) throws IOException {
-        validate(req);
+        Path versionsDir = root.resolve("versions");
+        Path versionDir = versionsDir.resolve(version);
+        Path filesDir = versionDir.resolve("files");
 
-        Path projectRoot = req.outputFolder().resolve(req.projectId());
-
-        var cfg = new HostProjectConfig(
-                req.projectId(),
-                req.name(),
-                req.mcVersion(),
-                req.loader(),
-                req.loaderVersion(),
-                false // TODO: UI-Option später
-        );
-
-        Path projectJson = projectRoot.resolve("project.json");
-        writeJsonAtomic(projectJson, cfg);
-
-
-        Path versionsDir = projectRoot.resolve("versions");
-        Path vDir = versionsDir.resolve(req.initialVersion());
-        Path filesDir = vDir.resolve("files");
-
-        // Ordnerstruktur
         Files.createDirectories(filesDir.resolve("mods"));
         Files.createDirectories(filesDir.resolve("config"));
         Files.createDirectories(filesDir.resolve("resourcepacks"));
         Files.createDirectories(filesDir.resolve("shaderpacks"));
 
-        // latest.json
-        String manifestUrl = normalizeBaseUrl(req.baseUrl()) + "versions/" + req.initialVersion() + "/manifest.json";
-        LatestPointer latest = new LatestPointer(req.projectId(), req.initialVersion(), manifestUrl);
+        // -------- URLs --------
+        String baseUrl = ensureSlash(req.baseUrl());
+        String manifestUrl = baseUrl + "versions/" + version + "/manifest.json";
+        String filesBaseUrl = baseUrl + "versions/" + version + "/files/";
 
-        String baseUrlForFiles = normalizeBaseUrl(req.baseUrl()) + "versions/" + req.initialVersion() + "/files/";
-
-        var loader = new ManifestModels.Loader(
-                req.loader().name().toLowerCase(),
-                req.loader() == LoaderType.VANILLA ? "" : req.loaderVersion().trim()
+        // -------- project.json --------
+        HostProjectConfig project = new HostProjectConfig(
+                req.projectId(),
+                req.name(),
+                req.mcVersion(),
+                new ManifestModels.Loader(req.loader().name(), req.loaderVersion()),
+                "",          // serverIP
+                25565,
+                false,
+                false
         );
 
-        int packVersion = 1;
 
-        var manifest = new ManifestModels.Manifest(
-                req.projectId(),      // packId
-                req.name(),           // packName
-                packVersion,          // int
-                req.mcVersion(),      // minecraftVersion
-                loader,
-                baseUrlForFiles,
-                new ArrayList<>(),    // files
-                null,                 // overrides
-                java.time.Instant.now().toString(), //generatedAt
-                "" //TODO: Host Changelog-URL
+        Path projectJson = root.resolve("project.json");
+        om.writeValue(projectJson.toFile(), project);
+
+        // -------- versions.json --------
+        VersionsIndex versionsIndex = new VersionsIndex(
+                version,
+                List.of(new VersionsIndex.VersionEntry(version, manifestUrl))
         );
 
-        Path latestPath = projectRoot.resolve("latest.json");
-        Path manifestPath = vDir.resolve("manifest.json");
+        Path versionsJson = root.resolve("versions.json");
+        om.writeValue(versionsJson.toFile(), versionsIndex);
 
-        writeJsonAtomic(latestPath, latest);
-        writeJsonAtomic(manifestPath, manifest);
+        // -------- manifest.json --------
+        ManifestModels.Manifest manifest = new ManifestModels.Manifest(
+                req.projectId(),
+                req.name(),
+                parseVersionInt(version),
+                req.mcVersion(),
+                new ManifestModels.Loader(req.loader().name(), req.loaderVersion()),
+                filesBaseUrl,
+                List.of(),
+                null,
+                Instant.now().toString(),
+                "" // changelogUrl
+        );
 
 
-        return new HostProjectPaths(projectRoot, latestPath, manifestPath, filesDir);
+        Path manifestJson = versionDir.resolve("manifest.json");
+        om.writeValue(manifestJson.toFile(), manifest);
+
+        return new HostProjectPaths(
+                root,
+                projectJson,
+                versionsJson,
+                versionDir,
+                manifestJson,
+                filesDir
+        );
     }
 
-    private void validate(CreateHostProjectRequest req) {
-        if (req == null) throw new IllegalArgumentException("request is null");
-        if (req.outputFolder() == null) throw new IllegalArgumentException("outputFolder is null");
-        if (req.projectId() == null || !PROJECT_ID.matcher(req.projectId()).matches())
-            throw new IllegalArgumentException("projectId invalid (use a-z 0-9 _ - , length 2..32)");
-        if (isBlank(req.name())) throw new IllegalArgumentException("name is empty");
-        if (isBlank(req.mcVersion())) throw new IllegalArgumentException("mcVersion is empty");
-        if (req.loader() == null) throw new IllegalArgumentException("loader is null");
-        if (req.loader() != LoaderType.VANILLA && isBlank(req.loaderVersion()))
-            throw new IllegalArgumentException("loaderVersion required for " + req.loader());
-        if (isBlank(req.initialVersion())) throw new IllegalArgumentException("initialVersion is empty");
-        if (isBlank(req.baseUrl())) throw new IllegalArgumentException("baseUrl is empty");
+    // ---------------- helpers ----------------
+
+    private static String ensureSlash(String s) {
+        return s.endsWith("/") ? s : s + "/";
     }
 
-    private static boolean isBlank(String s) {
-        return s == null || s.trim().isEmpty();
-    }
-
-    private static String normalizeBaseUrl(String url) {
-        String u = url.trim();
-        if (!u.endsWith("/")) u += "/";
-        return u;
-    }
-
-    private void writeJsonAtomic(Path target, Object value) throws IOException {
-        Path tmp = target.resolveSibling(target.getFileName().toString() + ".tmp");
-        Files.createDirectories(target.getParent());
-
-        om.writeValue(tmp.toFile(), value);
-
-        // atomar ersetzen (Windows/Linux)
+    private static int parseVersionInt(String v) {
+        // "1.0.0" -> 100
         try {
-            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
-        } catch (AtomicMoveNotSupportedException e) {
-            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+            String[] p = v.split("\\.");
+            int major = Integer.parseInt(p[0]);
+            int minor = p.length > 1 ? Integer.parseInt(p[1]) : 0;
+            return major * 100 + minor;
+        } catch (Exception e) {
+            return 1;
         }
     }
 }

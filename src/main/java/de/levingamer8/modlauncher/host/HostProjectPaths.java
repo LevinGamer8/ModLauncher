@@ -4,7 +4,9 @@ import java.nio.file.Path;
 
 public record HostProjectPaths(
         Path projectRoot,
-        Path latestJson,
+        Path projectJson,
+        Path versionsJson,
+        Path versionRoot,
         Path manifestJson,
         Path filesDir
 ) {}
