@@ -125,6 +125,13 @@ Feedback and issues are welcome.
 
 ---
 
+## Known bugs
+
+For known bugs and issues see the issues tab here on GitHub.
+If you find a new not listed bug or issue please open an issue.
+
+---
+
 ## License
 
 Not finalized yet.
