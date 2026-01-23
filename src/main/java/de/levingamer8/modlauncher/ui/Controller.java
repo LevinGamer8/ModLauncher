@@ -31,8 +31,10 @@ import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.fxml.FXMLLoader;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
+import javafx.scene.Parent;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -41,19 +43,25 @@ import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.*;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Modality;
+import javafx.stage.Stage;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
+
+import de.levingamer8.modlauncher.ui.dialogs.LauncherSettings;
 
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.TitledPane;
 
 
 import java.util.Locale;
+import java.util.ResourceBundle;
 import java.util.concurrent.*;
 import java.awt.Desktop;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class Controller {
+
+    @FXML private BorderPane root;
 
     @FXML private ComboBox<Profile> profileCombo;
 
@@ -66,6 +74,7 @@ public class Controller {
     @FXML private Label loginStatusLabel;
     @FXML private Button loginButton;
     @FXML private Button launcherUpdateButton;
+    @FXML private Button settingsButton;
     @FXML private Label versionLabel;
     @FXML private TextArea changelogArea;
     @FXML private Label serverStatusLabel;
@@ -75,6 +84,7 @@ public class Controller {
     @FXML private TitledPane logPane;
     @FXML private ImageView skinView;
     @FXML private Label accountNameLabel;
+
 
     // Playtime Labels (FXML muss fx:id="instancePlaytimeLabel" und fx:id="globalPlaytimeLabel" haben)
     @FXML private Label instancePlaytimeLabel;
@@ -202,6 +212,80 @@ public class Controller {
     @FXML
     public void onLauncherUpdate() {
         launcherUpdater.checkForUpdates(true);
+    }
+
+    @FXML
+    public void onOpenSettings() {
+        // Simple dialog (no extra FXML), stores values in Preferences via LauncherSettings
+        Dialog<ButtonType> dlg = new Dialog<>();
+        dlg.setTitle("Settings");
+        dlg.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
+
+        // --- Language ---
+        ComboBox<Locale> langBox = new ComboBox<>();
+        langBox.getItems().addAll(
+                null,               // system
+                Locale.GERMAN,
+                Locale.ENGLISH
+        );
+        langBox.setConverter(new StringConverter<>() {
+            @Override public String toString(Locale l) {
+                if (l == null) return "System (Default)";
+                if (l.getLanguage().equals("de")) return "Deutsch";
+                if (l.getLanguage().equals("en")) return "English";
+                return l.getDisplayName();
+            }
+            @Override public Locale fromString(String s) { return null; }
+        });
+
+        Locale current = LauncherSettings.getLocale();
+        if (current != null && current.getLanguage().equals("en")) langBox.setValue(Locale.ENGLISH);
+        else if (current != null && current.getLanguage().equals("de")) langBox.setValue(Locale.GERMAN);
+        else langBox.setValue(null);
+
+        // --- RAM ---
+        Spinner<Integer> ramSpinner = new Spinner<>(512, 65536, LauncherSettings.getRamMb(), 512);
+        ramSpinner.setEditable(true);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(12);
+        grid.setVgap(12);
+        grid.setPadding(new Insets(14));
+        grid.addRow(0, new Label("Sprache:"), langBox);
+        grid.addRow(1, new Label("RAM (MB):"), ramSpinner);
+        dlg.getDialogPane().setContent(grid);
+
+        dlg.initModality(Modality.APPLICATION_MODAL);
+        if (root != null && root.getScene() != null) {
+            Stage owner = (Stage) root.getScene().getWindow();
+            dlg.initOwner(owner);
+        }
+
+        Button okBtn = (Button) dlg.getDialogPane().lookupButton(ButtonType.OK);
+        okBtn.setText("Speichern");
+        Button cancelBtn = (Button) dlg.getDialogPane().lookupButton(ButtonType.CANCEL);
+        cancelBtn.setText("Abbrechen");
+
+        dlg.showAndWait().ifPresent(bt -> {
+            if (bt != ButtonType.OK) return;
+
+            // Save
+            Locale selected = langBox.getValue();
+            LauncherSettings.setLocale(selected == null ? Locale.getDefault() : selected);
+            LauncherSettings.setRamMb(ramSpinner.getValue());
+
+            // Apply Locale for next loads
+            Locale.setDefault(LauncherSettings.getLocale());
+
+            // IMPORTANT: Current UI won't magically retranslate.
+            // If you want live switching, you must reload the scene with a new ResourceBundle.
+            Alert a = new Alert(Alert.AlertType.INFORMATION);
+            a.setTitle("Hinweis");
+            a.setHeaderText("Einstellungen gespeichert");
+            a.setContentText("Sprache wird erst nach einem Neustart vollständig übernommen. RAM gilt sofort für den nächsten Start.");
+            a.initOwner(root != null && root.getScene() != null ? root.getScene().getWindow() : null);
+            a.showAndWait();
+        });
     }
 
     // -------------------- Playtime UI (FIXED PATHS) --------------------
@@ -769,7 +853,7 @@ public class Controller {
                                 manifest.minecraftVersion(),
                                 loaderType,
                                 loaderVer,
-                                4096
+                                LauncherSettings.getRamMb()
                         ),
                         auth,
                         msg -> appendLog(msg)
