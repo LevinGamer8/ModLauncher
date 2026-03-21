@@ -25,7 +25,8 @@ public final class MinecraftLauncherService {
             int serverPort,
             String serverName,
             boolean pinServerToTop,
-            boolean onlySelectedServer
+            boolean onlySelectedServer,
+            boolean directJoin
     ) {}
 
 
@@ -174,6 +175,21 @@ public final class MinecraftLauncherService {
                 "--quickPlayPath", "--quickPlaySingleplayer", "--quickPlayMultiplayer", "--quickPlayRealms"
         ));
         gameArgs.removeIf("--demo"::equals);
+
+        // Direct Join: Minecraft-Args anhängen, damit MC direkt zum Server verbindet
+        if (spec.directJoin() && spec.serverHost() != null && !spec.serverHost().isBlank()) {
+            int djPort = spec.serverPort() > 0 ? spec.serverPort() : 25565;
+            // Legacy (alle Versionen): --server + --port
+            gameArgs.add("--server");
+            gameArgs.add(spec.serverHost());
+            gameArgs.add("--port");
+            gameArgs.add(String.valueOf(djPort));
+            // Modern (1.20.2+): --quickPlayMultiplayer host:port
+            String qpAddr = djPort == 25565 ? spec.serverHost() : spec.serverHost() + ":" + djPort;
+            gameArgs.add("--quickPlayMultiplayer");
+            gameArgs.add(qpAddr);
+            L.accept("[LAUNCH] Direct Join -> " + spec.serverHost() + ":" + djPort);
+        }
 
         jvmArgs = ensureMemoryArgs(jvmArgs, spec.memoryMb());
 

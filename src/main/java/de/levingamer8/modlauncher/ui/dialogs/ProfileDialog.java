@@ -64,6 +64,8 @@ public class ProfileDialog {
 
         Label testStatus = new Label();
         testStatus.setMinHeight(18);
+        testStatus.setMaxWidth(360);
+        testStatus.setWrapText(true);
 
         HBox testRow = new HBox(10, testBtn, pi, testStatus);
 
@@ -157,7 +159,9 @@ public class ProfileDialog {
                 pi.setVisible(false);
                 testBtn.setDisable(false);
                 Throwable ex = t.getException();
-                testStatus.setText("Fehler: " + (ex == null ? "unknown" : ex.getMessage()));
+                String msg = ex == null ? "unknown" : (ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName());
+                testStatus.setText("Fehler: " + msg);
+                testStatus.setTooltip(new Tooltip(msg));
                 testStatus.setUserData(null);
                 updateOkEnabled.run();
             });

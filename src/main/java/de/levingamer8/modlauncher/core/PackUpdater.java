@@ -153,7 +153,7 @@ public class PackUpdater {
         }
     }
 
-    private Manifest fetchManifest(String url) throws IOException, InterruptedException {
+    private Manifest fetchManifest(String url) throws Exception {
         String json = http.getText(url);
         return om.readValue(json, Manifest.class);
     }
@@ -187,7 +187,7 @@ public class PackUpdater {
         return u;
     }
 
-    private VersionsIndex fetchVersions(String url) throws IOException, InterruptedException {
+    private VersionsIndex fetchVersions(String url) throws Exception {
         String json = http.getText(url);
         return om.readValue(json, VersionsIndex.class);
     }

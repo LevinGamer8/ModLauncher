@@ -2,42 +2,29 @@ package de.levingamer8.modlauncher.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import de.levingamer8.modlauncher.core.ManifestModels;
-
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import de.levingamer8.modlauncher.core.ProtocolFetcher;
 
 public class ManifestService {
 
     private final ObjectMapper mapper = new ObjectMapper();
+    private final ProtocolFetcher fetcher = new ProtocolFetcher();
 
     public ManifestModels.Manifest loadAndValidate(String url) throws Exception {
         if (url == null || url.isBlank())
             throw new IllegalArgumentException("Manifest-URL leer");
 
-        // latest.json automatisch auflösen
-        if (!url.endsWith(".json"))
+        // If no file extension, auto-append latest.json
+        if (!url.endsWith(".json") && !url.endsWith(".yml") && !url.endsWith(".yaml"))
             url = url.endsWith("/") ? url + "latest.json" : url + "/latest.json";
 
         ManifestModels.Manifest manifest = fetch(url);
-
         validate(manifest);
-
         return manifest;
     }
 
     private ManifestModels.Manifest fetch(String url) throws Exception {
-        HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
-        con.setConnectTimeout(5000);
-        con.setReadTimeout(5000);
-        con.setRequestMethod("GET");
-
-        if (con.getResponseCode() != 200)
-            throw new IllegalStateException("Manifest HTTP " + con.getResponseCode());
-
-        try (InputStream in = con.getInputStream()) {
-            return mapper.readValue(in, ManifestModels.Manifest.class);
-        }
+        String body = fetcher.getText(url);
+        return mapper.readValue(body, ManifestModels.Manifest.class);
     }
 
     private void validate(ManifestModels.Manifest m) {

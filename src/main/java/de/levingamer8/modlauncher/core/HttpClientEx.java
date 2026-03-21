@@ -1,44 +1,20 @@
 package de.levingamer8.modlauncher.core;
 
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.*;
-import java.time.Duration;
+import java.nio.file.Path;
 
+/**
+ * Multi-protocol fetcher. Despite the name (kept for backwards compatibility),
+ * supports HTTP, HTTPS, FTP, FTPS, SFTP, and SMB.
+ */
 public class HttpClientEx {
 
-    private final HttpClient client = HttpClient.newBuilder()
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .connectTimeout(Duration.ofSeconds(20))
-            .build();
+    private final ProtocolFetcher fetcher = new ProtocolFetcher();
 
-    public String getText(String url) throws IOException, InterruptedException {
-        HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-                .timeout(Duration.ofSeconds(30))
-                .GET().build();
-
-        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
-            throw new IOException("HTTP " + resp.statusCode() + " for " + url);
-        }
-        return resp.body();
+    public String getText(String url) throws Exception {
+        return fetcher.getText(url);
     }
 
-    public void downloadToFile(String url, java.nio.file.Path targetTmp) throws IOException, InterruptedException {
-        HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-                .timeout(Duration.ofMinutes(10))
-                .GET().build();
-
-        HttpResponse<java.io.InputStream> resp = client.send(req, HttpResponse.BodyHandlers.ofInputStream());
-        if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
-            throw new IOException("HTTP " + resp.statusCode() + " for " + url);
-        }
-
-        try (var in = resp.body();
-             var out = java.nio.file.Files.newOutputStream(targetTmp,
-                     java.nio.file.StandardOpenOption.CREATE,
-                     java.nio.file.StandardOpenOption.TRUNCATE_EXISTING)) {
-            in.transferTo(out);
-        }
+    public void downloadToFile(String url, Path targetTmp) throws Exception {
+        fetcher.downloadToFile(url, targetTmp);
     }
 }

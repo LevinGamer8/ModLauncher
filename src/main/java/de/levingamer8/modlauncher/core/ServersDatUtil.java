@@ -25,7 +25,7 @@ public final class ServersDatUtil {
         CompoundTag root = readOrCreateRoot(minecraftDir);
         ListTag<CompoundTag> servers = getOrCreateServersList(root);
 
-        String ip = host + ":" + port;
+        String ip = (port == 25565) ? host : host + ":" + port;
 
         List<CompoundTag> list = toJavaList(servers);
 
@@ -58,7 +58,7 @@ public final class ServersDatUtil {
     public static void setOnlyServer(Path minecraftDir, String name, String host, int port) throws IOException {
         CompoundTag root = readOrCreateRoot(minecraftDir);
 
-        String ip = host + ":" + port;
+        String ip = (port == 25565) ? host : host + ":" + port;
 
         CompoundTag entry = new CompoundTag();
         entry.putString("ip", ip);
@@ -81,7 +81,8 @@ public final class ServersDatUtil {
 
         if (Files.exists(serversDat)) {
             try {
-                return (CompoundTag) NBTUtil.read(serversDat.toFile()).getTag();
+                // servers.dat ist unkomprimiert
+                return (CompoundTag) NBTUtil.read(serversDat.toFile(), false).getTag();
             } catch (Exception e) {
                 // kaputte Datei -> neu anlegen
                 return new CompoundTag();
@@ -127,6 +128,6 @@ public final class ServersDatUtil {
 
     private static void writeRoot(Path minecraftDir, CompoundTag root) throws IOException {
         Path serversDat = minecraftDir.resolve("servers.dat");
-        NBTUtil.write(root, serversDat.toFile());
+        NBTUtil.write(root, serversDat.toFile(), false); // false = unkomprimiert (servers.dat ist NICHT gzip)
     }
 }

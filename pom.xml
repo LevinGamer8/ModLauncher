@@ -68,8 +68,24 @@
         <dependency>
             <groupId>fr.flowarg</groupId>
             <artifactId>flowupdater</artifactId>
-            <version>1.9.3</version>
+            <version>1.9.4</version>
         </dependency>
+
+        <!-- FTP / FTPS -->
+        <dependency>
+            <groupId>commons-net</groupId>
+            <artifactId>commons-net</artifactId>
+            <version>3.11.1</version>
+        </dependency>
+
+        <!-- SFTP -->
+        <dependency>
+            <groupId>com.jcraft</groupId>
+            <artifactId>jsch</artifactId>
+            <version>0.1.55</version>
+        </dependency>
+
+        <!-- SMB: uses Windows UNC paths (\\host\share) — no extra library needed -->
 
         <!-- Minecraft starten -->
         <dependency>

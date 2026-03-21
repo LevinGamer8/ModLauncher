@@ -34,11 +34,6 @@ import javafx.util.Duration;
 import javafx.util.StringConverter;
 
 import java.awt.Desktop;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
@@ -139,7 +134,8 @@ public class Controller {
             restartServerPolling();
         });
 
-
+        // Server-Tab sofort beim Start aktualisieren
+        Platform.runLater(this::restartServerPolling);
 
         appendLog("Instanz-Basisordner: " + profileStore.baseDir());
         appendLog("Shared-Cache: " + profileStore.sharedRoot());
@@ -312,6 +308,12 @@ public class Controller {
         logQueue.add(s);
     }
 
+    private static String stackTraceToString(Throwable t) {
+        var sw = new java.io.StringWriter();
+        t.printStackTrace(new java.io.PrintWriter(sw));
+        return sw.toString();
+    }
+
     private void clearLog() {
         logQueue.clear();
         if (logArea != null) logArea.clear();
@@ -383,8 +385,20 @@ public class Controller {
 
         TextField name = new TextField(p.name());
         TextField url = new TextField(p.manifestUrl());
-        TextField host = new TextField(p.serverHost() == null ? "" : p.serverHost());
-        TextField port = new TextField(String.valueOf(p.serverPort()));
+
+        // Server-Daten aus project.json vorausfüllen wenn Profil leer
+        String prefillHost = (p.serverHost() == null) ? "" : p.serverHost();
+        int prefillPort = p.serverPort();
+        if (prefillHost.isEmpty() && p.manifestUrl() != null && !p.manifestUrl().isBlank()) {
+            try {
+                ProjectJson project = fetchProject(p.manifestUrl());
+                prefillHost = safe(project.serverIP());
+                prefillPort = safeProjectPort(project);
+            } catch (Exception ignored) {}
+        }
+
+        TextField host = new TextField(prefillHost);
+        TextField port = new TextField(String.valueOf(prefillPort));
 
         ComboBox<ProfileStore.JoinMode> joinMode = new ComboBox<>();
         joinMode.getItems().setAll(ProfileStore.JoinMode.values());
@@ -482,9 +496,13 @@ public class Controller {
                 pi.setVisible(false);
                 testBtn.setDisable(false);
                 Throwable ex = t.getException();
-                testStatus.setText("Fehler: " + (ex == null ? "unknown" : ex.getMessage()));
+                String msg = ex == null ? "unknown" : (ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName());
+                testStatus.setText("Fehler: " + msg);
+                testStatus.setTooltip(new Tooltip(msg));
                 testStatus.setUserData(null);
                 updateSaveEnabled.run();
+                appendLog("FEHLER (Test): " + msg);
+                if (ex != null) appendLog(stackTraceToString(ex));
             });
 
             Thread th = new Thread(t, "manifest-test-edit");
@@ -569,6 +587,8 @@ public class Controller {
 
         Label status = new Label();
         status.setMinHeight(18);
+        status.setMaxWidth(360);
+        status.setWrapText(true);
 
         ProgressIndicator pi = new ProgressIndicator();
         pi.setVisible(false);
@@ -646,9 +666,13 @@ public class Controller {
                 pi.setVisible(false);
                 testBtn.setDisable(false);
                 Throwable ex = t.getException();
-                status.setText("Fehler: " + (ex == null ? "unknown" : ex.getMessage()));
+                String msg = ex == null ? "unknown" : (ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName());
+                status.setText("Fehler: " + msg);
+                status.setTooltip(new Tooltip(msg));
                 status.setUserData(null);
                 updateCreateEnabled.run();
+                appendLog("FEHLER (Test): " + msg);
+                if (ex != null) appendLog(stackTraceToString(ex));
             });
 
             Thread th = new Thread(t, "manifest-test");
@@ -666,11 +690,22 @@ public class Controller {
         var res = d.showAndWait().orElse(null);
         if (res == null) return;
 
+        // Server-Daten aus project.json laden
+        String serverHost = "";
+        int serverPort = 25565;
+        try {
+            ProjectJson project = fetchProject(res.manifestUrl());
+            serverHost = safe(project.serverIP());
+            serverPort = safeProjectPort(project);
+        } catch (Exception ignored) {
+            // project.json optional — Profil trotzdem erstellen
+        }
+
         var p = new ProfileStore.Profile(
                 res.name(),
                 res.manifestUrl(),
-                "",
-                25565,
+                serverHost,
+                serverPort,
                 ProfileStore.JoinMode.SERVERS_DAT
         );
 
@@ -756,11 +791,11 @@ public class Controller {
             Throwable ex = task.getException();
             String details = formatException(ex);
             appendLog("FEHLER: " + details);
+            if (ex != null) appendLog(stackTraceToString(ex));
             showError(details);
             updateAccountUi();
             setUiBusy(false);
             progressBar.setProgress(0);
-            if (ex != null) ex.printStackTrace();
         });
 
         Thread t = new Thread(task, "pack-updater");
@@ -837,6 +872,13 @@ public class Controller {
                 String serverHost = safe(project.serverIP());
                 String serverName = safe(project.projectName());
                 boolean onlySelected = safeProjectOnlySelected(project);
+                boolean directJoin = finalP.joinMode() == ProfileStore.JoinMode.DIRECT;
+
+                appendLog("[DEBUG] project.json -> serverIP=" + serverHost
+                        + " serverPort=" + serverPort
+                        + " onlySelected=" + onlySelected
+                        + " serverName=" + serverName
+                        + " directJoin=" + directJoin);
 
                 updateMessage("Install/Resolve/Launch...");
                 launcher.launch(
@@ -852,7 +894,8 @@ public class Controller {
                                 serverPort,
                                 serverName,
                                 true,
-                                onlySelected
+                                onlySelected,
+                                directJoin
                         ),
                         auth,
                         msg -> appendLog(msg)
@@ -890,9 +933,9 @@ public class Controller {
             statusLabel.setText("Fehler");
             Throwable ex = task.getException();
             appendLog("FEHLER: " + (ex != null ? ex.getMessage() : "unbekannt"));
+            if (ex != null) appendLog(stackTraceToString(ex));
             setUiBusy(false);
             progressBar.setProgress(0);
-            if (ex != null) ex.printStackTrace();
             showError(ex != null ? ex.getMessage() : "Unbekannter Fehler");
             refreshPlaytimeUi();
         });
@@ -931,7 +974,7 @@ public class Controller {
 
         // latest.json or versions.json next to project.json
         if (u.endsWith("latest.json") || u.endsWith("versions.json")) {
-            return java.net.URI.create(u).resolve("project.json").toString();
+            return de.levingamer8.modlauncher.core.ProtocolFetcher.resolve(u, "project.json");
         }
 
         // manifest inside versions folder: .../<pack>/versions/<ver>/manifest.json
@@ -1088,6 +1131,7 @@ public class Controller {
             Throwable ex = task.getException();
             setLoginStatus("Login fehlgeschlagen");
             appendLog("[LOGIN] ERROR: " + (ex != null ? ex.toString() : "unknown"));
+            if (ex != null) appendLog(stackTraceToString(ex));
         });
 
         new Thread(task, "ms-login").start();
@@ -1294,92 +1338,61 @@ public class Controller {
 
     // -------------------- Manifest / Changelog helpers --------------------
 
+    private final de.levingamer8.modlauncher.core.ProtocolFetcher protocolFetcher = new de.levingamer8.modlauncher.core.ProtocolFetcher();
+
     private ManifestModels.Manifest fetchManifest(String url) throws Exception {
         var om = new com.fasterxml.jackson.databind.ObjectMapper();
-        var client = java.net.http.HttpClient.newBuilder()
-                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
-                .build();
 
         String u = url.trim();
 
+        // 0) If URL is a base directory (no known file suffix), try project.json
+        if (!u.endsWith(".json") && !u.endsWith(".yml") && !u.endsWith(".yaml")) {
+            if (!u.endsWith("/")) u += "/";
+            u += "project.json";
+        }
+
         // 1) latest.json -> manifestUrl
         if (u.endsWith("latest.json")) {
-            var req1 = java.net.http.HttpRequest.newBuilder(java.net.URI.create(u)).GET().build();
-            var resp1 = client.send(req1, java.net.http.HttpResponse.BodyHandlers.ofString());
-            if (resp1.statusCode() != 200) throw new RuntimeException("latest HTTP " + resp1.statusCode());
-
-            LatestPointer latest = om.readValue(resp1.body(), LatestPointer.class);
+            String body = protocolFetcher.getText(u);
+            LatestPointer latest = om.readValue(body, LatestPointer.class);
             u = latest.manifestUrl();
         }
 
         // 2) project.json -> versions.json -> latest manifestUrl
         if (u.endsWith("project.json")) {
-            // project.json laden (optional – du brauchst es hier nicht zwingend zum Update)
-            var reqP = java.net.http.HttpRequest.newBuilder(java.net.URI.create(u)).GET().build();
-            var respP = client.send(reqP, java.net.http.HttpResponse.BodyHandlers.ofString());
-            if (respP.statusCode() != 200) throw new RuntimeException("project HTTP " + respP.statusCode());
-
-            // versions.json URL (neben project.json)
-            String versionsUrl = java.net.URI.create(u).resolve("versions.json").toString();
-
-            var reqV = java.net.http.HttpRequest.newBuilder(java.net.URI.create(versionsUrl)).GET().build();
-            var respV = client.send(reqV, java.net.http.HttpResponse.BodyHandlers.ofString());
-            if (respV.statusCode() != 200) throw new RuntimeException("versions HTTP " + respV.statusCode());
-
-            VersionsIndex vi = om.readValue(respV.body(), VersionsIndex.class);
+            protocolFetcher.getText(u); // validate it exists
+            String versionsUrl = de.levingamer8.modlauncher.core.ProtocolFetcher.resolve(u, "versions.json");
+            String versionsBody = protocolFetcher.getText(versionsUrl);
+            VersionsIndex vi = om.readValue(versionsBody, VersionsIndex.class);
             String manifestUrl = vi.latestManifestUrl();
             if (manifestUrl == null || manifestUrl.isBlank())
                 throw new IllegalStateException("versions.json hat keine manifestUrl");
-
             u = manifestUrl;
         }
 
         // 3) versions.json direkt -> latest manifestUrl
         if (u.endsWith("versions.json")) {
-            var reqV = java.net.http.HttpRequest.newBuilder(java.net.URI.create(u)).GET().build();
-            var respV = client.send(reqV, java.net.http.HttpResponse.BodyHandlers.ofString());
-            if (respV.statusCode() != 200) throw new RuntimeException("versions HTTP " + respV.statusCode());
-
-            VersionsIndex vi = om.readValue(respV.body(), VersionsIndex.class);
+            String versionsBody = protocolFetcher.getText(u);
+            VersionsIndex vi = om.readValue(versionsBody, VersionsIndex.class);
             String manifestUrl = vi.latestManifestUrl();
             if (manifestUrl == null || manifestUrl.isBlank())
                 throw new IllegalStateException("versions.json hat keine manifestUrl");
-
             u = manifestUrl;
         }
 
         // 4) manifest laden
-        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(u)).GET().build();
-        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() != 200) throw new RuntimeException("Manifest HTTP " + resp.statusCode());
-
-        return om.readValue(resp.body(), ManifestModels.Manifest.class);
+        String manifestBody = protocolFetcher.getText(u);
+        return om.readValue(manifestBody, ManifestModels.Manifest.class);
     }
 
 
 
     private String loadTextFromUrl(String url) throws Exception {
-        var client = java.net.http.HttpClient.newBuilder()
-                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
-                .build();
-
-        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
-                .GET()
-                .build();
-
-        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        if (resp.statusCode() != 200) {
-            throw new RuntimeException("Changelog HTTP " + resp.statusCode());
-        }
-        return resp.body();
+        return protocolFetcher.getText(url);
     }
 
     private static String resolveUrl(String base, String maybeRelative) {
-        if (maybeRelative == null) return "";
-        String s = maybeRelative.trim();
-        if (s.isEmpty()) return "";
-        if (s.startsWith("http://") || s.startsWith("https://")) return s;
-        return java.net.URI.create(base).resolve(s).toString();
+        return de.levingamer8.modlauncher.core.ProtocolFetcher.resolve(base, maybeRelative);
     }
 
     // -------------------- Host Mode --------------------
@@ -1409,16 +1422,40 @@ public class Controller {
         String host = (p.serverHost() == null) ? "" : p.serverHost().trim();
         int port = p.serverPort();
 
+        // Wenn Profil keinen Server hat, versuche project.json zu laden
+        if (host.isEmpty() && p.manifestUrl() != null && !p.manifestUrl().isBlank()) {
+            setServerUiUnknown("Server-Daten werden geladen...");
+            serverPollExec.execute(() -> {
+                try {
+                    ProjectJson project = fetchProject(p.manifestUrl());
+                    String projHost = safe(project.serverIP());
+                    int projPort = safeProjectPort(project);
+                    if (!projHost.isEmpty()) {
+                        Platform.runLater(() -> startServerPolling(projHost, projPort));
+                    } else {
+                        Platform.runLater(() -> setServerUiUnknown("Kein Server in project.json konfiguriert."));
+                    }
+                } catch (Exception e) {
+                    Platform.runLater(() -> setServerUiUnknown("project.json konnte nicht geladen werden."));
+                }
+            });
+            return;
+        }
+
         if (host.isEmpty()) {
             setServerUiUnknown("Kein Server-Host gesetzt (Profil bearbeiten).");
             return;
         }
+
+        startServerPolling(host, port);
+    }
+
+    private void startServerPolling(String host, int port) {
         if (port <= 0 || port > 65535) port = 25565;
 
         int finalPort1 = port;
         serverPollExec.execute(() -> pollServerOnce(host, finalPort1));
 
-        //TODO: whats is performance? ping every 30 seconds
         final String finalHost = host;
         final int finalPort = port;
         serverPollTask = serverPollExec.scheduleAtFixedRate(
@@ -1492,18 +1529,10 @@ public class Controller {
 
     private ProjectJson fetchProject(String anyUrl) throws Exception {
         var om = new com.fasterxml.jackson.databind.ObjectMapper();
-        var client = java.net.http.HttpClient.newBuilder()
-                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
-                .build();
-
         String u = toProjectUrlFromAny(anyUrl);
         if (u.isBlank()) throw new IllegalArgumentException("URL ist leer");
-
-        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(u)).GET().build();
-        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
-        if (resp.statusCode() != 200) throw new RuntimeException("project HTTP " + resp.statusCode());
-
-        return om.readValue(resp.body(), ProjectJson.class);
+        String body = protocolFetcher.getText(u);
+        return om.readValue(body, ProjectJson.class);
     }
 
     private static String extractJsonValueForKey(String json, String key) {
@@ -1521,22 +1550,9 @@ public class Controller {
     }
 
     private static String httpGet(String url) throws Exception {
-        HttpClient client = HttpClient.newBuilder()
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .connectTimeout(java.time.Duration.ofSeconds(4))
-                .build();
-
-        HttpRequest req = HttpRequest.newBuilder(URI.create(url))
-                .timeout(java.time.Duration.ofSeconds(8))
-                .header("User-Agent", "ModLauncher/1.0")
-                .GET()
-                .build();
-
-        HttpResponse<String> resp = client.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
-            throw new RuntimeException("HTTP " + resp.statusCode() + " for " + url);
-        }
-        return resp.body();
+        // Used for hardcoded API calls (Mojang, Fabric, etc.) - always HTTP
+        var fetcher = new de.levingamer8.modlauncher.core.ProtocolFetcher();
+        return fetcher.getText(url);
     }
 
 

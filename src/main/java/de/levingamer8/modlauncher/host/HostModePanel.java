@@ -1454,15 +1454,7 @@ public class HostModePanel {
     }
 
     private static String httpGet(String url) throws Exception {
-        var client = java.net.http.HttpClient.newBuilder()
-                .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
-                .connectTimeout(java.time.Duration.ofSeconds(4)).build();
-        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
-                .timeout(java.time.Duration.ofSeconds(8))
-                .header("User-Agent", "ModLauncher/1.0").GET().build();
-        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
-        if (resp.statusCode() < 200 || resp.statusCode() >= 300)
-            throw new RuntimeException("HTTP " + resp.statusCode());
-        return resp.body();
+        // Used for hardcoded API calls (Mojang, Fabric, NeoForge, etc.) - always HTTP
+        return new de.levingamer8.modlauncher.core.ProtocolFetcher().getText(url);
     }
 }
