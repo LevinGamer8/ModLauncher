@@ -2,6 +2,7 @@ package de.levingamer8.modlauncher.mc;
 
 import com.google.gson.JsonObject;
 import de.levingamer8.modlauncher.core.LoaderType;
+import de.levingamer8.modlauncher.core.ServersDatUtil;
 import de.levingamer8.modlauncher.runtime.JavaRuntimeManager;
 
 import java.io.BufferedReader;
@@ -15,7 +16,18 @@ import java.util.function.Consumer;
 public final class MinecraftLauncherService {
 
     public record AuthSession(String playerName, String uuid, String accessToken, String userType) {}
-    public record LaunchSpec(String mcVersion, LoaderType loaderType, String loaderVersion, int memoryMb) {}
+    public record LaunchSpec(
+            String mcVersion,
+            LoaderType loaderType,
+            String loaderVersion,
+            int memoryMb,
+            String serverHost,
+            int serverPort,
+            String serverName,
+            boolean pinServerToTop,
+            boolean onlySelectedServer
+    ) {}
+
 
     private static final String LAUNCHER_NAME = "ModLauncher";
     private static final String LAUNCHER_VERSION = "1.0";
@@ -47,6 +59,35 @@ public final class MinecraftLauncherService {
         Files.createDirectories(instanceGameDir);
         Files.createDirectories(instanceRuntimeDir);
 
+        try {
+            if (spec.serverHost() != null && !spec.serverHost().isBlank() && spec.serverPort() > 0) {
+                String sName = spec.serverName() == null ? "Server" : spec.serverName();
+                if (spec.onlySelectedServer()) {
+                    ServersDatUtil.setOnlyServer(
+                            instanceGameDir,
+                            sName,
+                            spec.serverHost(),
+                            spec.serverPort()
+                    );
+                    L.accept("[SERVERLIST] servers.dat set to ONLY: " + spec.serverHost() + ":" + spec.serverPort());
+                } else {
+                    ServersDatUtil.upsertServer(
+                            instanceGameDir,
+                            sName,
+                            spec.serverHost(),
+                            spec.serverPort(),
+                            spec.pinServerToTop()
+                    );
+                    L.accept("[SERVERLIST] servers.dat updated: " + spec.serverHost() + ":" + spec.serverPort());
+                }
+            } else {
+                L.accept("[SERVERLIST] skipped (no server configured)");
+            }
+        } catch (Exception e) {
+            L.accept("[SERVERLIST] failed: " + e.getMessage());
+        }
+
+
         PlaytimeStore instancePlaytime = new PlaytimeStore(instanceRuntimeDir.resolve("playtime.properties"));
         PlaytimeStore globalPlaytime = new PlaytimeStore(sharedRoot.resolve("playtime_total.properties"));
 
@@ -74,6 +115,8 @@ public final class MinecraftLauncherService {
             String loaderVer = latest.loaderVersion();
             L.accept("[FABRIC] Verwende latest Fabric Loader für " + spec.mcVersion() + ": " + loaderVer);
             versionId = fabricInstaller.ensureFabricVersion(sharedRoot, spec.mcVersion(), loaderVer);
+
+            new FabricApiAutoInstaller().ensureFabricApiInstalled(instanceGameDir, spec.mcVersion(), loaderVer, log);
 
         } else if (spec.loaderType() == LoaderType.FORGE) {
             String mc = spec.mcVersion();

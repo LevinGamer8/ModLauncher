@@ -1,30 +1,17 @@
 package de.levingamer8.modlauncher.ui;
 
 import de.levingamer8.modlauncher.auth.MicrosoftMinecraftAuth;
-import de.levingamer8.modlauncher.core.*;
 import de.levingamer8.modlauncher.auth.MicrosoftSessionStore;
-import de.levingamer8.modlauncher.core.ManifestModels;
-import de.levingamer8.modlauncher.core.PackUpdater;
-import de.levingamer8.modlauncher.core.ProfileStore;
+import de.levingamer8.modlauncher.core.*;
 import de.levingamer8.modlauncher.core.ProfileStore.Profile;
-import de.levingamer8.modlauncher.core.LoaderType;
 import de.levingamer8.modlauncher.host.*;
-import de.levingamer8.modlauncher.host.modrinth.ModrinthClient;
-import de.levingamer8.modlauncher.host.modrinth.SearchHit;
-import de.levingamer8.modlauncher.host.modrinth.Version;
 import de.levingamer8.modlauncher.mc.MinecraftLauncherService;
-
-import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.nio.file.Path;
-
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-
 import de.levingamer8.modlauncher.mc.PlaytimeStore;
+import de.levingamer8.modlauncher.mc.ProcessWatcher;
+import de.levingamer8.modlauncher.ui.dialogs.I18n;
+import de.levingamer8.modlauncher.ui.dialogs.LauncherSettings;
 import de.levingamer8.modlauncher.update.UpdateController;
+
 import javafx.animation.Animation;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
@@ -32,34 +19,31 @@ import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.fxml.FXMLLoader;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
-import javafx.scene.Parent;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.scene.layout.*;
-import javafx.stage.DirectoryChooser;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javafx.stage.Window;
 import javafx.util.Duration;
 import javafx.util.StringConverter;
-import javafx.stage.FileChooser;
 
-
-import de.levingamer8.modlauncher.ui.dialogs.LauncherSettings;
-
-import javafx.scene.control.SplitPane;
-import javafx.scene.control.TitledPane;
-
+import java.awt.Desktop;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
-import java.util.ResourceBundle;
 import java.util.concurrent.*;
-import java.awt.Desktop;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class Controller {
@@ -87,15 +71,10 @@ public class Controller {
     @FXML private TitledPane logPane;
     @FXML private ImageView skinView;
     @FXML private Label accountNameLabel;
-
-
-    // Playtime Labels (FXML muss fx:id="instancePlaytimeLabel" und fx:id="globalPlaytimeLabel" haben)
     @FXML private Label instancePlaytimeLabel;
     @FXML private Label globalPlaytimeLabel;
-
     @FXML private Label serverPlayersLabel;
     @FXML private Label serverPingLabel;
-
     private PlaytimeStore globalPlaytimeStore;
     private PlaytimeStore instancePlaytimeStore;
 
@@ -118,12 +97,6 @@ public class Controller {
     private record NewProfileData(String name, String manifestUrl) {}
 
     private record VersionsPointer(String version, String manifestUrl) {}
-
-
-    private final java.util.concurrent.ConcurrentHashMap<String, Image> iconCache = new java.util.concurrent.ConcurrentHashMap<>();
-    private final java.net.http.HttpClient iconHttp = java.net.http.HttpClient.newBuilder()
-            .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
-            .build();
 
 
     private final ScheduledExecutorService serverPollExec =
@@ -161,8 +134,6 @@ public class Controller {
         reloadProfilesAndSelect(null);
 
         profileCombo.valueProperty().addListener((obs, oldV, newV) -> {
-            Profile currentProfile = newV;   // WICHTIG: Profil-State setzen!
-
             refreshProfileDependentUi();
             refreshPlaytimeUi();
             restartServerPolling();
@@ -767,7 +738,13 @@ public class Controller {
 
         task.setOnSucceeded(e -> {
             statusLabel.textProperty().unbind();
-            statusLabel.setText("Bereit");
+
+            if (new ProcessWatcher().isRunning()) {
+                statusLabel.setText(I18n.getBundle().getString("game.running"));
+            } else {
+                statusLabel.setText(I18n.getBundle().getString("game.closed"));
+            }
+
             appendLog("Update fertig.");
             setUiBusy(false);
             progressBar.setProgress(1);
@@ -819,20 +796,23 @@ public class Controller {
                 updateMessage("Manifest laden...");
                 ManifestModels.Manifest manifest = fetchManifest(finalP.manifestUrl());
 
-                // Changelog optional laden
-                String changelog = "Kein Changelog definiert.";
+                updateMessage("project.json laden...");
+                ProjectJson project = fetchProject(finalP.manifestUrl());
+
+                // Pack-Changelog laden
+                String packInfo = "Kein Changelog definiert.";
                 String clUrl = resolveUrl(finalP.manifestUrl(), manifest.changelogUrl());
                 if (!clUrl.isBlank()) {
                     try {
-                        changelog = loadTextFromUrl(clUrl);
+                        packInfo = loadTextFromUrl(clUrl);
                     } catch (Exception ex) {
-                        changelog = "Changelog konnte nicht geladen werden:\n" + ex.getMessage() + "\nURL: " + clUrl;
+                        packInfo = "Changelog konnte nicht geladen werden:\n" + ex.getMessage() + "\nURL: " + clUrl;
                     }
                 }
 
-                final String finalChangelog = changelog;
+                final String packInfoFinal = packInfo;
                 Platform.runLater(() -> {
-                    if (changelogArea != null) changelogArea.setText(finalChangelog);
+                    if (packInfoLabel != null) packInfoLabel.setText(packInfoFinal);
                 });
 
                 LoaderType loaderType = LoaderType.fromString(
@@ -853,6 +833,11 @@ public class Controller {
                         mcSession.userType()
                 );
 
+                int serverPort = safeProjectPort(project);
+                String serverHost = safe(project.serverIP());
+                String serverName = safe(project.projectName());
+                boolean onlySelected = safeProjectOnlySelected(project);
+
                 updateMessage("Install/Resolve/Launch...");
                 launcher.launch(
                         sharedRoot,
@@ -862,19 +847,24 @@ public class Controller {
                                 manifest.minecraftVersion(),
                                 loaderType,
                                 loaderVer,
-                                LauncherSettings.getRamMb()
+                                LauncherSettings.getRamMb(),
+                                serverHost,
+                                serverPort,
+                                serverName,
+                                true,
+                                onlySelected
                         ),
                         auth,
                         msg -> appendLog(msg)
                 );
 
-                Platform.runLater(() -> {
-                    setStatus("Beendet", "pillOk");
 
-                    // sofort
+
+                Platform.runLater(() -> {
+                    setStatus(I18n.getBundle().getString("game.closed"), "pillOk");
+
                     refreshPlaytimeUi();
 
-                    // delayed (wichtig!)
                     Timeline t = new Timeline(new KeyFrame(Duration.millis(400), ev -> refreshPlaytimeUi()));
                     t.setCycleCount(1);
                     t.play();
@@ -928,6 +918,42 @@ public class Controller {
             }
         } catch (Exception ex) {
             showError("Konnte Ordner nicht öffnen: " + ex.getMessage());
+        }
+    }
+
+    private static String toProjectUrlFromAny(String url) {
+        if (url == null) return "";
+        String u = url.trim();
+        if (u.isEmpty()) return "";
+
+        // already project.json
+        if (u.endsWith("project.json")) return u;
+
+        // latest.json or versions.json next to project.json
+        if (u.endsWith("latest.json") || u.endsWith("versions.json")) {
+            return java.net.URI.create(u).resolve("project.json").toString();
+        }
+
+        // manifest inside versions folder: .../<pack>/versions/<ver>/manifest.json
+        int idx = u.indexOf("/versions/");
+        if (idx > 0) {
+            return u.substring(0, idx) + "/project.json";
+        }
+
+        // fallback: same directory as given url
+        int lastSlash = u.lastIndexOf('/');
+        if (lastSlash > 0) return u.substring(0, lastSlash + 1) + "project.json";
+        return u + "/project.json";
+    }
+
+    private static int parsePortSafe(String s) {
+        if (s == null) return 0;
+        String t = s.trim();
+        if (t.isEmpty()) return 0;
+        try {
+            return Integer.parseInt(t);
+        } catch (Exception e) {
+            return 0;
         }
     }
 
@@ -1356,609 +1382,13 @@ public class Controller {
         return java.net.URI.create(base).resolve(s).toString();
     }
 
-    // -------------------- Host Mode (AUTO MC + AUTO Loader Versions) --------------------
+    // -------------------- Host Mode --------------------
 
     @FXML
     public void onHostMode() {
-
-        ChoiceDialog<String> mode = new ChoiceDialog<>("Neues Pack erstellen",
-                "Neues Pack erstellen", "Bestehendes Pack bearbeiten");
-        mode.setTitle("Host Mode");
-        mode.setHeaderText(null);
-        mode.setContentText("Was willst du machen?");
-
-        String choice = mode.showAndWait().orElse(null);
-        if (choice == null) return;
-
-        boolean editMode = choice.equals("Bestehendes Pack bearbeiten");
-
-        if (editMode) {
-            openExistingHostProject();   // <<< NEU
-            return;
-        }
-
-
-        Dialog<CreateHostProjectRequest> d = new Dialog<>();
-        d.setTitle("Projekt hosten");
-        d.setHeaderText(null);
-
-        ButtonType createBtn = new ButtonType("Erstellen", ButtonBar.ButtonData.OK_DONE);
-        d.getDialogPane().getButtonTypes().addAll(createBtn, ButtonType.CANCEL);
-
-        GridPane gp = new GridPane();
-        gp.setHgap(10);
-        gp.setVgap(10);
-        gp.setPadding(new Insets(12));
-
-        TextField projectId = new TextField("testpack");
-        TextField name = new TextField("Test Pack");
-
-        // MC Version: editable ComboBox + async Release-Versionen
-        ComboBox<String> mcVersion = new ComboBox<>();
-        mcVersion.setEditable(true);
-        mcVersion.getEditor().setText("1.20.1");
-        mcVersion.setPrefWidth(220);
-
-        ComboBox<de.levingamer8.modlauncher.core.LoaderType> loader = new ComboBox<>();
-        loader.getItems().setAll(de.levingamer8.modlauncher.core.LoaderType.values());
-        loader.getSelectionModel().select(de.levingamer8.modlauncher.core.LoaderType.FABRIC);
-
-        // Loader Version: editable ComboBox + auto passend
-        ComboBox<String> loaderVersion = new ComboBox<>();
-        loaderVersion.setEditable(true);
-        loaderVersion.setPromptText("z.B. 0.15.11 / 47.3.0");
-        loaderVersion.setPrefWidth(220);
-
-        TextField baseUrl = new TextField("https://mc.local/testpack/");
-        TextField initialVersion = new TextField("1.0.0");
-
-        TextField outFolder = new TextField(profileStore.baseDir().resolve("host-projects").toString());
-        Button browse = new Button("…");
-        browse.setOnAction(e -> {
-            DirectoryChooser ch = new DirectoryChooser();
-            ch.setTitle("Output Ordner wählen");
-            java.io.File sel = ch.showDialog(d.getDialogPane().getScene().getWindow());
-            if (sel != null) outFolder.setText(sel.getAbsolutePath());
-        });
-
-        int r = 0;
-        gp.addRow(r++, new Label("Project ID:"), projectId);
-        gp.addRow(r++, new Label("Name:"), name);
-        gp.addRow(r++, new Label("MC Version:"), mcVersion);
-        gp.addRow(r++, new Label("Loader:"), loader);
-        gp.addRow(r++, new Label("Loader Version:"), loaderVersion);
-        gp.addRow(r++, new Label("Base URL:"), baseUrl);
-        gp.addRow(r++, new Label("Initial Version:"), initialVersion);
-
-        HBox outRow = new HBox(8, outFolder, browse);
-        HBox.setHgrow(outFolder, Priority.ALWAYS);
-        gp.addRow(r++, new Label("Output Folder:"), outRow);
-
-        d.getDialogPane().setContent(gp);
-
-        // MC Release-Versionen laden (nicht blocken)
-        Task<List<String>> mcLoad = new Task<>() {
-            @Override protected List<String> call() {
-                return resolveMinecraftReleaseVersions();
-            }
-        };
-        mcLoad.setOnSucceeded(ev -> {
-            List<String> list = mcLoad.getValue();
-            if (list != null && !list.isEmpty()) {
-                String keep = mcVersion.getEditor().getText();
-                mcVersion.getItems().setAll(list);
-                if (keep != null && !keep.isBlank()) mcVersion.getEditor().setText(keep);
-            }
-        });
-        mcLoad.setOnFailed(ev -> {
-            if (mcVersion.getItems().isEmpty()) {
-                mcVersion.getItems().setAll(List.of("1.21.4", "1.21.3", "1.21.2", "1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.1"));
-            }
-        });
-        Thread th = new Thread(mcLoad, "mc-versions");
-        th.setDaemon(true);
-        th.start();
-
-        Runnable refreshLoaderVersions = () -> {
-            de.levingamer8.modlauncher.core.LoaderType lt = loader.getValue();
-            boolean vanilla = (lt == de.levingamer8.modlauncher.core.LoaderType.VANILLA);
-
-            loaderVersion.setDisable(vanilla);
-            loaderVersion.setOpacity(vanilla ? 0.55 : 1.0);
-
-            if (vanilla) {
-                loaderVersion.getItems().clear();
-                loaderVersion.getEditor().setText("");
-                return;
-            }
-
-            String mc = mcVersion.getEditor().getText() == null ? "" : mcVersion.getEditor().getText().trim();
-            if (mc.isEmpty()) return;
-
-            List<String> versions = resolveKnownLoaderVersions(mc, lt);
-            loaderVersion.getItems().setAll(versions);
-
-            String current = loaderVersion.getEditor().getText() == null ? "" : loaderVersion.getEditor().getText().trim();
-            if (current.isEmpty() || (!versions.isEmpty() && versions.stream().noneMatch(v -> v.equalsIgnoreCase(current)))) {
-                if (!versions.isEmpty()) loaderVersion.getEditor().setText(versions.get(0));
-            }
-        };
-
-        loader.valueProperty().addListener((obs, o, n) -> refreshLoaderVersions.run());
-        mcVersion.getEditor().textProperty().addListener((obs, o, n) -> refreshLoaderVersions.run());
-
-        // initial
-        refreshLoaderVersions.run();
-
-        Node createNode = d.getDialogPane().lookupButton(createBtn);
-        createNode.disableProperty().bind(
-                projectId.textProperty().isEmpty()
-                        .or(name.textProperty().isEmpty())
-                        .or(mcVersion.getEditor().textProperty().isEmpty())
-                        .or(baseUrl.textProperty().isEmpty())
-                        .or(outFolder.textProperty().isEmpty())
-                        .or(initialVersion.textProperty().isEmpty())
-        );
-
-        d.setResultConverter(bt -> {
-            if (bt != createBtn) return null;
-            return new CreateHostProjectRequest(
-                    projectId.getText().trim().toLowerCase(Locale.ROOT),
-                    name.getText().trim(),
-                    mcVersion.getEditor().getText().trim(),
-                    loader.getValue(),
-                    loaderVersion.getEditor().getText().trim(),
-                    initialVersion.getText().trim(),
-                    baseUrl.getText().trim(),
-                    Path.of(outFolder.getText().trim())
-            );
-        });
-
-        var req = d.showAndWait().orElse(null);
-        if (req == null) return;
-
-        try {
-            var creator = new HostProjectCreator();
-            var paths = creator.create(req);
-            Path modsDir = paths.filesDir().resolve("mods");
-            openModrinthSearchAndAdd(req.mcVersion(), req.loader(), modsDir);
-
-            appendLog("[HOST] Projekt erstellt: " + paths.projectRoot());
-            appendLog("[HOST] project: " + paths.projectJson());
-            appendLog("[HOST] manifest: " + paths.manifestJson());
-
-            if (Desktop.isDesktopSupported()) {
-                Desktop.getDesktop().open(paths.projectRoot().toFile());
-            }
-        } catch (Exception ex) {
-            showError("Host-Projekt konnte nicht erstellt werden:\n" + ex.getMessage());
-        }
-    }
-
-    private void openExistingHostProject() {
-        // project.json auswählen
-        javafx.stage.FileChooser fc = new javafx.stage.FileChooser();
-        fc.setTitle("project.json auswählen");
-        fc.getExtensionFilters().add(
-                new javafx.stage.FileChooser.ExtensionFilter("project.json", "project.json")
-        );
-
-        java.io.File f = fc.showOpenDialog(profileCombo.getScene().getWindow());
-        if (f == null) return;
-
-        try {
-            var om = new com.fasterxml.jackson.databind.ObjectMapper();
-
-            // 1) project.json lesen
-            HostProjectConfig cfg = om.readValue(f, HostProjectConfig.class);
-
-            java.nio.file.Path projectJson = f.toPath();
-            java.nio.file.Path root = projectJson.getParent();
-
-            // 2) versions.json lesen (liegt neben project.json)
-            java.nio.file.Path versionsJson = root.resolve("versions.json");
-            if (!java.nio.file.Files.exists(versionsJson)) {
-                showError("versions.json fehlt neben project.json:\n" + versionsJson);
-                return;
-            }
-
-            VersionsIndex idx = om.readValue(versionsJson.toFile(), VersionsIndex.class);
-
-            String latest = idx.latestVersion();
-            String latestManifestUrl = idx.latestManifestUrl();
-
-            if (latest == null || latest.isBlank() || latestManifestUrl == null || latestManifestUrl.isBlank()) {
-                showError("versions.json ist kaputt: keine latest Version / manifestUrl gefunden.");
-                return;
-            }
-
-            // Optional: Eintrag zur Log-Ausgabe finden
-            VersionsIndex.VersionEntry ve = null;
-            if (idx.versions() != null) {
-                for (var e : idx.versions()) {
-                    if (e != null && latest.equalsIgnoreCase(e.version())) {
-                        ve = e;
-                        break;
-                    }
-                }
-            }
-
-            // 3) modsDir ableiten: <root>/versions/<version>/files/mods
-            java.nio.file.Path modsDir = root.resolve("versions")
-                    .resolve(latest)
-                    .resolve("files")
-                    .resolve("mods");
-
-            java.nio.file.Files.createDirectories(modsDir);
-
-            // 4) Modrinth-Dialog öffnen
-            LoaderType lt = LoaderType.fromString(cfg.loader().type()); // cfg.loader() muss {type,version} liefern
-            openModrinthSearchAndAdd(cfg.mcVersion(), lt, modsDir);
-
-            appendLog("[HOST] Projekt geladen: " + cfg.projectId());
-            appendLog("[HOST] Latest: " + latest + " -> " + (ve != null ? ve.manifestUrl() : latestManifestUrl));
-
-            if (java.awt.Desktop.isDesktopSupported()) {
-                java.awt.Desktop.getDesktop().open(root.toFile());
-            }
-        } catch (Exception ex) {
-            showError("Konnte Projekt nicht laden:\n" + ex.getMessage());
-        }
-    }
-
-
-
-    public void openModrinthSearchAndAdd(String mcVersion, LoaderType loaderType, Path modsDir) {
-        if (loaderType == LoaderType.VANILLA) {
-            showError("Modrinth Search: Vanilla hat keine Mods im Sinne von Forge/Fabric.");
-            return;
-        }
-
-        String modrinthLoader = LoaderType.toString(loaderType);
-        ModrinthClient api = new ModrinthClient();
-
-        final int pageSize = 50;
-        final java.util.concurrent.atomic.AtomicInteger offset = new java.util.concurrent.atomic.AtomicInteger(0);
-
-        Dialog<Void> dialog = new Dialog<>();
-        dialog.initModality(Modality.WINDOW_MODAL);
-        dialog.setTitle("Modrinth: Mods hinzufügen");
-        dialog.setHeaderText(null);
-
-        ButtonType closeBtn = new ButtonType("Schließen", ButtonBar.ButtonData.CANCEL_CLOSE);
-        dialog.getDialogPane().getButtonTypes().add(closeBtn);
-
-        TextField query = new TextField();
-        query.setPromptText("Mod suchen (z.B. sodium, jei, iris...)");
-
-        Label ctx = new Label("MC: " + mcVersion + " | Loader: " + loaderType);
-
-        Button searchBtn = new Button("Suchen");
-        searchBtn.setDefaultButton(true);
-
-        Button prevBtn = new Button("<");
-        Button nextBtn = new Button(">");
-        prevBtn.setDisable(true);
-        nextBtn.setDisable(true);
-
-        ProgressIndicator progress = new ProgressIndicator();
-        progress.setVisible(false);
-        progress.setMaxSize(18, 18);
-
-        Label status = new Label();
-        status.setMinHeight(18);
-
-        Label pageInfo = new Label();
-        pageInfo.setMinHeight(18);
-
-        ListView<SearchHit> list = new ListView<>();
-        list.setCellFactory(lv -> new ListCell<>() {
-
-            private final ImageView icon = new ImageView();
-            private final Label title = new Label();
-            private final Label meta = new Label();
-            private final Label desc = new Label();
-
-            private final VBox textBox = new VBox(2, title, meta, desc);
-            private final HBox row = new HBox(10, icon, textBox);
-            private final VBox root = new VBox(8, row);
-
-            private String expectedIconUrl;
-
-            {
-                icon.setFitWidth(28);
-                icon.setFitHeight(28);
-                icon.setPreserveRatio(true);
-                icon.setSmooth(true);
-
-                title.setStyle("-fx-font-weight: bold; -fx-font-size: 13px;");
-                meta.setStyle("-fx-opacity: 0.75; -fx-font-size: 11px;");
-                desc.setStyle("-fx-opacity: 0.9; -fx-font-size: 12px;");
-                desc.setWrapText(true);
-
-                HBox.setHgrow(textBox, Priority.ALWAYS);
-                textBox.prefWidthProperty().bind(lv.widthProperty().subtract(90));
-
-                root.setPadding(new Insets(8, 10, 8, 10));
-                root.setStyle("-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 10;");
-
-                this.hoverProperty().addListener((obs, o, n) -> {
-                    root.setStyle(n
-                            ? "-fx-background-color: rgba(255,255,255,0.06); -fx-background-radius: 10;"
-                            : "-fx-background-color: rgba(255,255,255,0.03); -fx-background-radius: 10;");
-                });
-            }
-
-            @Override
-            protected void updateItem(SearchHit item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) {
-                    setGraphic(null);
-                    return;
-                }
-
-                title.setText(item.title());
-
-                String author = (item.author() == null || item.author().isBlank()) ? "?" : item.author();
-                meta.setText(author + " • " + formatDownloads(item.downloads()) + " downloads • " + item.slug());
-
-                desc.setText(item.description() == null ? "" : item.description());
-
-                expectedIconUrl = item.icon_url();
-                loadIconAsync(expectedIconUrl, icon, () -> expectedIconUrl);
-
-                setGraphic(root);
-            }
-        });
-
-        Button addBtn = new Button("Add to Pack");
-        Button genBtn = new Button("Generate Manifest");
-        genBtn.setDisable(false);
-        addBtn.setDisable(true);
-
-        list.getSelectionModel().selectedItemProperty().addListener((obs, o, n) -> addBtn.setDisable(n == null));
-        list.setOnMouseClicked(e -> {
-            if (e.getClickCount() == 2) addBtn.fire();
-        });
-
-        HBox top = new HBox(10, query, searchBtn, progress, prevBtn, nextBtn);
-        HBox.setHgrow(query, Priority.ALWAYS);
-
-        HBox bottom = new HBox(10, status, new Region(), pageInfo);
-        HBox.setHgrow(bottom.getChildren().get(1), Priority.ALWAYS);
-
-        VBox root = new VBox(10, ctx, top, list, new HBox(10, addBtn, genBtn), bottom);
-        root.setPadding(new Insets(12));
-        VBox.setVgrow(list, Priority.ALWAYS);
-
-        dialog.getDialogPane().setContent(root);
-        dialog.getDialogPane().setPrefSize(900, 650);
-        dialog.setResizable(true);
-
-        java.util.function.IntConsumer doSearch = (off) -> {
-            String q = query.getText() == null ? "" : query.getText().trim();
-            if (q.isEmpty()) {
-                status.setText("Bitte Suchbegriff eingeben.");
-                return;
-            }
-
-            progress.setVisible(true);
-            searchBtn.setDisable(true);
-            addBtn.setDisable(true);
-            prevBtn.setDisable(true);
-            nextBtn.setDisable(true);
-            status.setText("Suche…");
-            pageInfo.setText("");
-
-            Task<de.levingamer8.modlauncher.host.modrinth.SearchResponse> t = new Task<>() {
-                @Override
-                protected de.levingamer8.modlauncher.host.modrinth.SearchResponse call() throws Exception {
-                    return api.searchModsPage(q, modrinthLoader, mcVersion, pageSize, off);
-                }
-            };
-
-            t.setOnSucceeded(ev -> {
-                var resp = t.getValue();
-                var hits = resp.hits();
-
-                list.getItems().setAll(hits);
-                if (!hits.isEmpty()) list.scrollTo(0);
-
-                progress.setVisible(false);
-                searchBtn.setDisable(false);
-
-                int total = resp.total_hits();
-                int curOff = resp.offset();
-                int lim = resp.limit();
-
-                int page = (lim <= 0) ? 1 : (curOff / lim) + 1;
-                int pages = (lim <= 0) ? 1 : (int) Math.ceil(total / (double) lim);
-
-                status.setText(hits.isEmpty() ? "Keine Treffer." : ("Treffer: " + hits.size()));
-                pageInfo.setText("Seite " + page + "/" + pages + " • " + total + " gesamt");
-
-                prevBtn.setDisable(curOff <= 0);
-                nextBtn.setDisable(curOff + lim >= total);
-
-                offset.set(curOff);
-            });
-
-            t.setOnFailed(ev -> {
-                Throwable ex = t.getException();
-                progress.setVisible(false);
-                searchBtn.setDisable(false);
-                status.setText("Fehler bei Suche.");
-                showError("Modrinth Suche fehlgeschlagen:\n" + (ex == null ? "unknown" : ex.getMessage()));
-            });
-
-            Thread th2 = new Thread(t, "modrinth-search");
-            th2.setDaemon(true);
-            th2.start();
-        };
-
-        searchBtn.setOnAction(e -> doSearch.accept(0));
-        query.setOnAction(e -> doSearch.accept(0));
-
-        prevBtn.setOnAction(e -> doSearch.accept(Math.max(0, offset.get() - pageSize)));
-        nextBtn.setOnAction(e -> doSearch.accept(offset.get() + pageSize));
-
-        Path filesDir = modsDir.getParent();
-        Path manifestPath = filesDir.getParent().resolve("manifest.json");
-
-        genBtn.setOnAction(e -> {
-            progress.setVisible(true);
-            searchBtn.setDisable(true);
-            addBtn.setDisable(true);
-            genBtn.setDisable(true);
-            status.setText("Generiere Manifest...");
-
-            Task<Void> gen = new Task<>() {
-                @Override protected Void call() throws Exception {
-                    new HostManifestGenerator().generate(manifestPath, filesDir);
-                    return null;
-                }
-            };
-
-            gen.setOnSucceeded(ev -> {
-                progress.setVisible(false);
-                searchBtn.setDisable(false);
-                addBtn.setDisable(false);
-                genBtn.setDisable(false);
-                status.setText("Manifest aktualisiert.");
-                appendLog("[HOST] Manifest aktualisiert: " + manifestPath);
-            });
-
-            gen.setOnFailed(ev -> {
-                progress.setVisible(false);
-                searchBtn.setDisable(false);
-                addBtn.setDisable(false);
-                genBtn.setDisable(false);
-                status.setText("Manifest-Fehler");
-                Throwable ex = gen.getException();
-                showError("Manifest Generierung fehlgeschlagen:\n" + (ex == null ? "unknown" : ex.getMessage()));
-            });
-
-            Thread th2 = new Thread(gen, "host-manifest-gen");
-            th2.setDaemon(true);
-            th2.start();
-        });
-
-        addBtn.setOnAction(e -> {
-            SearchHit sel = list.getSelectionModel().getSelectedItem();
-            if (sel == null) return;
-
-            progress.setVisible(true);
-            searchBtn.setDisable(true);
-            addBtn.setDisable(true);
-            status.setText("Downloade & füge hinzu: " + sel.title());
-
-            Task<Path> t = new Task<>() {
-                @Override
-                protected Path call() throws Exception {
-                    Version v = api.getBestVersion(sel.project_id(), modrinthLoader, mcVersion);
-                    return api.downloadPrimaryJar(v, modsDir);
-                }
-            };
-
-            t.setOnSucceeded(ev -> {
-                Path jar = t.getValue();
-                appendLog("[HOST] Mod hinzugefügt: " + jar.getFileName());
-
-                Task<Void> gen = new Task<>() {
-                    @Override protected Void call() throws Exception {
-                        new HostManifestGenerator().generate(manifestPath, filesDir);
-                        return null;
-                    }
-                };
-
-                gen.setOnSucceeded(ev2 -> {
-                    progress.setVisible(false);
-                    searchBtn.setDisable(false);
-                    status.setText("Hinzugefügt + Manifest updated: " + jar.getFileName());
-                    appendLog("[HOST] Manifest aktualisiert: " + manifestPath);
-                });
-
-                gen.setOnFailed(ev2 -> {
-                    progress.setVisible(false);
-                    searchBtn.setDisable(false);
-                    status.setText("Mod hinzugefügt, aber Manifest-Fehler");
-                    Throwable ex = gen.getException();
-                    showError("Mod hinzugefügt (" + jar.getFileName() + "), aber Manifest-Update fehlgeschlagen:\n"
-                            + (ex == null ? "unknown" : ex.getMessage()));
-                });
-
-                Thread th3 = new Thread(gen, "host-manifest-gen");
-                th3.setDaemon(true);
-                th3.start();
-            });
-
-            t.setOnFailed(ev -> {
-                Throwable ex = t.getException();
-                progress.setVisible(false);
-                searchBtn.setDisable(false);
-                status.setText("Fehler beim Download.");
-                showError("Mod hinzufügen fehlgeschlagen:\n" + (ex == null ? "unknown" : ex.getMessage()));
-            });
-
-            Thread th2 = new Thread(t, "modrinth-add");
-            th2.setDaemon(true);
-            th2.start();
-        });
-
-        dialog.showAndWait();
-    }
-
-    private static String formatDownloads(long n) {
-        if (n < 1_000) return Long.toString(n);
-        double val;
-        String suffix;
-        if (n < 1_000_000) { val = n / 1_000.0; suffix = "K"; }
-        else if (n < 1_000_000_000) { val = n / 1_000_000.0; suffix = "M"; }
-        else { val = n / 1_000_000_000.0; suffix = "B"; }
-
-        String s = (val >= 10) ? String.format(Locale.US, "%.0f", val)
-                : String.format(Locale.US, "%.1f", val);
-        if (s.endsWith(".0")) s = s.substring(0, s.length() - 2);
-        return s + suffix;
-    }
-
-    private void loadIconAsync(String url, ImageView target, java.util.function.Supplier<String> currentUrl) {
-        if (url == null || url.isBlank()) {
-            target.setImage(null);
-            return;
-        }
-
-        Image cached = iconCache.get(url);
-        if (cached != null) {
-            target.setImage(cached);
-            return;
-        }
-
-        target.setImage(null);
-
-        Task<Image> t = new Task<>() {
-            @Override protected Image call() throws Exception {
-                var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(url))
-                        .header("User-Agent", "ModLauncher/1.0 (host-mode)")
-                        .GET().build();
-                var res = iconHttp.send(req, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
-                if (res.statusCode() != 200) return null;
-                return new Image(new java.io.ByteArrayInputStream(res.body()));
-            }
-        };
-
-        t.setOnSucceeded(e -> {
-            var img = t.getValue();
-            if (img == null) return;
-            iconCache.put(url, img);
-            if (url.equals(currentUrl.get())) {
-                target.setImage(img);
-            }
-        });
-
-        Thread th2 = new Thread(t, "modrinth-icon");
-        th2.setDaemon(true);
-        th2.start();
+        Window hostOwner = (root != null && root.getScene() != null) ? root.getScene().getWindow() : null;
+        HostModePanel panel = new HostModePanel(hostOwner, profileStore, this::appendLog);
+        panel.show();
     }
 
 
@@ -2059,94 +1489,21 @@ public class Controller {
 
     // -------------------- Host Mode helper: MC + Loader versions (NO extra libs needed) --------------------
 
-    private static List<String> resolveMinecraftReleaseVersions() {
-        // Mojang/Piston Meta version manifest (release only)
-        String url = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
-        try {
-            String json = httpGet(url);
 
-            java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
-            java.util.regex.Pattern p = java.util.regex.Pattern.compile(
-                    "\\\"id\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"\\s*,\\s*\\\"type\\\"\\s*:\\s*\\\"release\\\""
-            );
-            java.util.regex.Matcher m = p.matcher(json);
-            while (m.find()) {
-                out.add(m.group(1));
-                if (out.size() >= 120) break;
-            }
-            return new java.util.ArrayList<>(out);
-        } catch (Exception e) {
-            return List.of("1.21.4", "1.21.3", "1.21.2", "1.21.1", "1.21", "1.20.6", "1.20.4", "1.20.1");
-        }
-    }
+    private ProjectJson fetchProject(String anyUrl) throws Exception {
+        var om = new com.fasterxml.jackson.databind.ObjectMapper();
+        var client = java.net.http.HttpClient.newBuilder()
+                .followRedirects(java.net.http.HttpClient.Redirect.ALWAYS)
+                .build();
 
-    private static List<String> resolveKnownLoaderVersions(String mcVersion, de.levingamer8.modlauncher.core.LoaderType lt) {
-        try {
-            return switch (lt) {
-                case FABRIC -> resolveFabricLoaderVersions(mcVersion);
-                case QUILT -> resolveQuiltLoaderVersions(mcVersion);
-                case FORGE -> resolveForgePromotedVersions(mcVersion);
-                case NEOFORGE -> List.of(); // erstmal leer, sonst trägt man schnell Müll ein
-                case VANILLA -> List.of();
-            };
-        } catch (Exception ignored) {
-        }
+        String u = toProjectUrlFromAny(anyUrl);
+        if (u.isBlank()) throw new IllegalArgumentException("URL ist leer");
 
-        // offline fallback
-        return switch (lt) {
-            case FABRIC -> List.of("0.15.11", "0.15.10", "0.15.9");
-            case FORGE -> mcVersion.equals("1.20.1")
-                    ? List.of("47.3.0", "47.2.0", "47.1.0")
-                    : List.of();
-            case QUILT -> List.of("0.26.0");
-            default -> List.of();
-        };
-    }
+        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create(u)).GET().build();
+        var resp = client.send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() != 200) throw new RuntimeException("project HTTP " + resp.statusCode());
 
-    private static List<String> resolveFabricLoaderVersions(String mcVersion) throws Exception {
-        String url = "https://meta.fabricmc.net/v2/versions/loader/" + mcVersion;
-        String json = httpGet(url);
-
-        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
-        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
-                "\\\"loader\\\"\\s*:\\s*\\{[^}]*?\\\"version\\\"\\s*:\\s*\\\"([^\\\"]+)\\\"",
-                java.util.regex.Pattern.DOTALL
-        );
-        java.util.regex.Matcher m = p.matcher(json);
-        while (m.find()) {
-            out.add(m.group(1));
-            if (out.size() >= 30) break;
-        }
-        return new java.util.ArrayList<>(out);
-    }
-
-    private static List<String> resolveQuiltLoaderVersions(String mcVersion) throws Exception {
-        String url = "https://meta.quiltmc.org/v3/versions/loader/" + mcVersion;
-        String json = httpGet(url);
-
-        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
-        java.util.regex.Pattern p = java.util.regex.Pattern.compile(
-                "\\\"loader_version\\\"\\s*:\\s*\\\"([^\\\"]+)\\\""
-        );
-        java.util.regex.Matcher m = p.matcher(json);
-        while (m.find()) {
-            out.add(m.group(1));
-            if (out.size() >= 30) break;
-        }
-        return new java.util.ArrayList<>(out);
-    }
-
-    private static List<String> resolveForgePromotedVersions(String mcVersion) throws Exception {
-        String url = "https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json";
-        String json = httpGet(url);
-
-        String recommended = extractJsonValueForKey(json, mcVersion + "-recommended");
-        String latest = extractJsonValueForKey(json, mcVersion + "-latest");
-
-        if (recommended != null && latest != null && !recommended.equals(latest)) return List.of(recommended, latest);
-        if (recommended != null) return List.of(recommended);
-        if (latest != null) return List.of(latest);
-        return List.of();
+        return om.readValue(resp.body(), ProjectJson.class);
     }
 
     private static String extractJsonValueForKey(String json, String key) {
@@ -2208,6 +1565,37 @@ public class Controller {
         return arr;
     }
 
+
+    private static String safe(String s) { return s == null ? "" : s.trim(); }
+
+    private static int safeProjectPort(ProjectJson p) {
+        try {
+            // falls es int ist
+            return Math.max(0, Integer.parseInt(p.serverPort()));
+        } catch (Throwable ignored) {
+        }
+        try {
+            // falls String
+            String v = (String) p.getClass().getMethod("serverPort").invoke(p);
+            int port = Integer.parseInt(v.trim());
+            return (port >= 1 && port <= 65535) ? port : 25565;
+        } catch (Throwable ignored) {
+        }
+        return 25565;
+    }
+
+    private static boolean safeProjectOnlySelected(ProjectJson p) {
+        try {
+            return p.onlySelectedServer();
+        } catch (Throwable ignored) {
+        }
+        try {
+            Object v = p.getClass().getMethod("onlySelectedServer").invoke(p);
+            if (v instanceof Boolean b) return b;
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
 
 
 }

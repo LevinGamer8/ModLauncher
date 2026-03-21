@@ -76,9 +76,33 @@ public final class MojangVersionResolver {
         for (JsonElement e : v.getAsJsonArray("libraries")) {
             JsonObject lib = e.getAsJsonObject();
             if (!lib.has("name")) continue;
-            map.put(lib.get("name").getAsString(), lib);
+
+            String coord = lib.get("name").getAsString();
+            String key = mavenKey(coord);
+
+            // Parent wird zuerst gemerged, Child danach -> Child überschreibt Parent bei gleichen Artifacts.
+            map.put(key, lib);
         }
     }
+
+    /**
+     * "group:artifact:version(:classifier)?(@ext)?" -> Key ohne Version, aber MIT classifier
+     */
+    private static String mavenKey(String coord) {
+        String c = coord;
+        int at = c.lastIndexOf('@');
+        if (at >= 0) c = c.substring(0, at);
+
+        String[] p = c.split(":");
+        if (p.length < 2) return coord;
+
+        String group = p[0];
+        String artifact = p[1];
+        String classifier = (p.length >= 4) ? p[3] : null;
+
+        return classifier == null ? (group + ":" + artifact) : (group + ":" + artifact + ":" + classifier);
+    }
+
 
     private JsonObject readJson(Path p) throws Exception {
         try (Reader r = Files.newBufferedReader(p, StandardCharsets.UTF_8)) {

@@ -355,3 +355,113 @@
     -fx-padding: 0;
     -fx-background-color: transparent;
 }
+
+/* ===== Host Mode Panel ===== */
+.hostRoot {
+    -fx-background-color:
+            radial-gradient(center 72% 18%, radius 65%, rgba(0,255,255,0.10), transparent 62%),
+            linear-gradient(to bottom, #0b0f14, #0a0d12);
+}
+
+/* Project list */
+.hostProjectList {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+.hostProjectList .list-cell {
+    -fx-background-color: transparent;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-padding: 2;
+}
+.hostProjectList .list-cell:filled:hover {
+    -fx-background-color: rgba(0,255,255,0.06);
+}
+.hostProjectList .list-cell:filled:selected {
+    -fx-background-color: rgba(0,255,255,0.12);
+    -fx-border-color: rgba(0,255,255,0.30);
+    -fx-border-width: 1;
+}
+
+/* Dialog/alert overrides for dark theme */
+.dialog-pane {
+    -fx-background-color:
+            linear-gradient(to bottom, #0d1117, #0a0d12);
+}
+.dialog-pane .content {
+    -fx-background-color: transparent;
+}
+.dialog-pane .header-panel {
+    -fx-background-color: rgba(255,255,255,0.03);
+}
+.dialog-pane .button-bar {
+    -fx-background-color: rgba(255,255,255,0.025);
+    -fx-padding: 10 14 10 14;
+}
+
+/* Separator */
+.separator .line {
+    -fx-border-color: rgba(255,255,255,0.08);
+    -fx-border-width: 1 0 0 0;
+}
+
+/* SplitPane in host mode */
+.split-pane {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+.split-pane > .split-pane-divider {
+    -fx-padding: 0 2 0 2;
+    -fx-background-color: rgba(255,255,255,0.08);
+}
+
+/* ListView general dark theme */
+.list-view {
+    -fx-background-color: rgba(255,255,255,0.03);
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(255,255,255,0.08);
+    -fx-border-radius: 12;
+}
+.list-view .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text;
+}
+.list-view .list-cell:filled:hover {
+    -fx-background-color: rgba(255,255,255,0.04);
+}
+.list-view .list-cell:filled:selected {
+    -fx-background-color: rgba(0,255,255,0.10);
+}
+
+/* Tooltip */
+.tooltip {
+    -fx-background-color: rgba(15,20,28,0.95);
+    -fx-text-fill: #eef7ff;
+    -fx-border-color: rgba(0,255,255,0.20);
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+    -fx-padding: 8 12 8 12;
+    -fx-font-size: 12px;
+}
+
+/* Spinner */
+.spinner {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-background-radius: 12;
+    -fx-border-color: rgba(255,255,255,0.12);
+    -fx-border-radius: 12;
+}
+.spinner .text-field {
+    -fx-background-color: transparent;
+    -fx-border-width: 0;
+}
+.spinner .increment-arrow-button,
+.spinner .decrement-arrow-button {
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(255,255,255,0.10);
+}
+.spinner .increment-arrow-button:hover,
+.spinner .decrement-arrow-button:hover {
+    -fx-background-color: rgba(0,255,255,0.10);
+}
