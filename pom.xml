@@ -11,7 +11,7 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <javafx.version>25.0.2</javafx.version>
+        <javafx.version>26</javafx.version>
         <jackson.version>2.21.1</jackson.version>
     </properties>
 
