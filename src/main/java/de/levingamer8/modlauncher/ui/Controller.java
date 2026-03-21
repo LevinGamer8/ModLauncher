@@ -55,13 +55,12 @@ public class Controller {
     @FXML private Button playButton;
     @FXML private Label loginStatusLabel;
     @FXML private Button loginButton;
-    @FXML private Button launcherUpdateButton;
-    @FXML private Button settingsButton;
+    @FXML private MenuButton menuButton;
     @FXML private Label versionLabel;
     @FXML private TextArea changelogArea;
     @FXML private Label serverStatusLabel;
     @FXML private Label serverDetailsLabel;
-    @FXML private Label packInfoLabel;
+    @FXML private TextArea packInfoArea;
     @FXML private SplitPane mainSplit;
     @FXML private TitledPane logPane;
     @FXML private ImageView skinView;
@@ -132,10 +131,14 @@ public class Controller {
             refreshProfileDependentUi();
             refreshPlaytimeUi();
             restartServerPolling();
+            loadModpackChangelog();
         });
 
-        // Server-Tab sofort beim Start aktualisieren
-        Platform.runLater(this::restartServerPolling);
+        // Server-Tab und Modpack-Changelog sofort beim Start laden
+        Platform.runLater(() -> {
+            restartServerPolling();
+            loadModpackChangelog();
+        });
 
         appendLog("Instanz-Basisordner: " + profileStore.baseDir());
         appendLog("Shared-Cache: " + profileStore.sharedRoot());
@@ -164,7 +167,7 @@ public class Controller {
         if (changelogArea != null) changelogArea.setText("- Noch kein Changelog geladen.\n");
         if (serverStatusLabel != null) serverStatusLabel.getStyleClass().setAll("pillError");
         if (serverDetailsLabel != null) serverDetailsLabel.setText("Noch kein Check implementiert.");
-        if (packInfoLabel != null) packInfoLabel.setText("Manifest laden -> dann hier Infos anzeigen.");
+        if (packInfoArea != null) packInfoArea.setText("Manifest laden -> dann hier Infos anzeigen.");
 
         if (logArea != null) logArea.setEditable(false);
 
@@ -230,6 +233,7 @@ public class Controller {
         grid.addRow(0, new Label("Sprache:"), langBox);
         grid.addRow(1, new Label("RAM (MB):"), ramSpinner);
         dlg.getDialogPane().setContent(grid);
+        dlg.getDialogPane().setMinWidth(400);
 
         dlg.initModality(Modality.APPLICATION_MODAL);
         if (root != null && root.getScene() != null) {
@@ -404,6 +408,14 @@ public class Controller {
         joinMode.getItems().setAll(ProfileStore.JoinMode.values());
         joinMode.getSelectionModel().select(p.joinMode() == null ? ProfileStore.JoinMode.SERVERS_DAT : p.joinMode());
 
+        int currentRam = p.ramMb() > 0 ? p.ramMb() : LauncherSettings.getRamMb();
+        Spinner<Integer> ramSpinner = new Spinner<>(512, 65536, currentRam, 512);
+        ramSpinner.setEditable(true);
+        Label ramHint = new Label("(0 = Default: " + LauncherSettings.getRamMb() + " MB)");
+        ramHint.getStyleClass().add("mutedSmall");
+        HBox ramRow = new HBox(8, ramSpinner, ramHint);
+        ramRow.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+
         Button testBtn = new Button("Testen");
         ProgressIndicator pi = new ProgressIndicator();
         pi.setVisible(false);
@@ -411,6 +423,9 @@ public class Controller {
 
         Label testStatus = new Label();
         testStatus.setMinHeight(18);
+        testStatus.setWrapText(true);
+        testStatus.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(testStatus, Priority.ALWAYS);
         HBox testRow = new HBox(10, testBtn, pi, testStatus);
 
         int r = 0;
@@ -420,6 +435,7 @@ public class Controller {
         gp.addRow(r++, new Label("Server Host:"), host);
         gp.addRow(r++, new Label("Server Port:"), port);
         gp.addRow(r++, new Label("Join Mode:"), joinMode);
+        gp.addRow(r++, new Label("RAM (MB):"), ramRow);
 
         ColumnConstraints c1 = new ColumnConstraints();
         c1.setMinWidth(110);
@@ -428,6 +444,7 @@ public class Controller {
         gp.getColumnConstraints().setAll(c1, c2);
 
         dialog.getDialogPane().setContent(gp);
+        dialog.getDialogPane().setMinWidth(520);
 
         Node saveNode = dialog.getDialogPane().lookupButton(saveBtn);
         saveNode.setDisable(true);
@@ -529,7 +546,8 @@ public class Controller {
                     newUrl,
                     newHost.isEmpty() ? "" : newHost,
                     newPort,
-                    joinMode.getValue()
+                    joinMode.getValue(),
+                    ramSpinner.getValue()
             );
         });
 
@@ -563,7 +581,8 @@ public class Controller {
                 p.manifestUrl(),
                 p.serverHost(),
                 p.serverPort(),
-                p.joinMode()
+                p.joinMode(),
+                p.ramMb()
         );
 
         profileStore.saveOrUpdateProfile(copy);
@@ -587,8 +606,9 @@ public class Controller {
 
         Label status = new Label();
         status.setMinHeight(18);
-        status.setMaxWidth(360);
         status.setWrapText(true);
+        status.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(status, Priority.ALWAYS);
 
         ProgressIndicator pi = new ProgressIndicator();
         pi.setVisible(false);
@@ -606,6 +626,7 @@ public class Controller {
         );
         root.setPadding(new Insets(12));
         d.getDialogPane().setContent(root);
+        d.getDialogPane().setMinWidth(520);
 
         Node createNode = d.getDialogPane().lookupButton(createBtn);
         createNode.setDisable(true);
@@ -706,7 +727,8 @@ public class Controller {
                 res.manifestUrl(),
                 serverHost,
                 serverPort,
-                ProfileStore.JoinMode.SERVERS_DAT
+                ProfileStore.JoinMode.SERVERS_DAT,
+                0  // 0 = use global default
         );
 
         profileStore.saveOrUpdateProfile(p);
@@ -847,7 +869,7 @@ public class Controller {
 
                 final String packInfoFinal = packInfo;
                 Platform.runLater(() -> {
-                    if (packInfoLabel != null) packInfoLabel.setText(packInfoFinal);
+                    if (packInfoArea != null) packInfoArea.setText(packInfoFinal);
                 });
 
                 LoaderType loaderType = LoaderType.fromString(
@@ -889,7 +911,7 @@ public class Controller {
                                 manifest.minecraftVersion(),
                                 loaderType,
                                 loaderVer,
-                                LauncherSettings.getRamMb(),
+                                finalP.effectiveRamMb(),
                                 serverHost,
                                 serverPort,
                                 serverName,
@@ -1005,7 +1027,7 @@ public class Controller {
     private void setUiBusy(boolean busy) {
         this.uiBusy = busy;
 
-        Node[] nodes = { loginButton, profileCombo, launcherUpdateButton };
+        Node[] nodes = { loginButton, profileCombo, menuButton };
         for (Node n : nodes) if (n != null) n.setDisable(busy);
 
         if (progressBar != null) {
@@ -1393,6 +1415,43 @@ public class Controller {
 
     private static String resolveUrl(String base, String maybeRelative) {
         return de.levingamer8.modlauncher.core.ProtocolFetcher.resolve(base, maybeRelative);
+    }
+
+    // -------------------- Modpack Changelog --------------------
+
+    private void loadModpackChangelog() {
+        Profile p = (profileCombo != null) ? profileCombo.getValue() : null;
+        if (p == null || p.manifestUrl() == null || p.manifestUrl().isBlank()) {
+            if (packInfoArea != null) packInfoArea.setText("Kein Profil oder Manifest-URL.");
+            return;
+        }
+
+        if (packInfoArea != null) packInfoArea.setText("Changelog wird geladen...");
+
+        serverPollExec.execute(() -> {
+            try {
+                ManifestModels.Manifest manifest = fetchManifest(p.manifestUrl());
+                String clUrl = resolveUrl(p.manifestUrl(), manifest.changelogUrl());
+                String packInfo;
+                if (clUrl != null && !clUrl.isBlank()) {
+                    try {
+                        packInfo = loadTextFromUrl(clUrl);
+                    } catch (Exception ex) {
+                        packInfo = "Changelog konnte nicht geladen werden.";
+                    }
+                } else {
+                    packInfo = "Kein Changelog definiert.";
+                }
+                final String text = packInfo;
+                Platform.runLater(() -> {
+                    if (packInfoArea != null) packInfoArea.setText(text);
+                });
+            } catch (Exception e) {
+                Platform.runLater(() -> {
+                    if (packInfoArea != null) packInfoArea.setText("Manifest konnte nicht geladen werden.");
+                });
+            }
+        });
     }
 
     // -------------------- Host Mode --------------------

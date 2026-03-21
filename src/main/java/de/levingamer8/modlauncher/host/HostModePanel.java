@@ -95,7 +95,8 @@ public class HostModePanel {
         root.getStyleClass().add("hostRoot");
 
         dialog.getDialogPane().setContent(root);
-        dialog.getDialogPane().setPrefSize(960, 640);
+        dialog.getDialogPane().setPrefSize(1050, 680);
+        dialog.getDialogPane().setMinWidth(800);
 
         // Apply theme
         String css = getClass().getResource("/de/levingamer8/modlauncher/ui/theme.css").toExternalForm();
@@ -220,12 +221,12 @@ public class HostModePanel {
         Label actionsTitle = new Label("Aktionen");
         actionsTitle.getStyleClass().add("sectionTitle");
 
-        Button addModsBtn = new Button("Mods hinzufügen");
-        addModsBtn.getStyleClass().addAll("secondary", "actionButton");
+        Button addModsBtn = new Button("Mods hinzuf\u00fcgen");
+        addModsBtn.getStyleClass().addAll("secondary");
         addModsBtn.setOnAction(e -> onAddMods(entry));
 
-        Button openDirBtn = new Button("Ordner öffnen");
-        openDirBtn.getStyleClass().addAll("ghost", "actionButton");
+        Button openDirBtn = new Button("Ordner \u00f6ffnen");
+        openDirBtn.getStyleClass().addAll("ghost");
         openDirBtn.setOnAction(e -> {
             try {
                 if (Desktop.isDesktopSupported()) Desktop.getDesktop().open(root.toFile());
@@ -235,7 +236,7 @@ public class HostModePanel {
         });
 
         Button genManifestBtn = new Button("Manifest generieren");
-        genManifestBtn.getStyleClass().addAll("ghost", "actionButton");
+        genManifestBtn.getStyleClass().addAll("ghost");
         genManifestBtn.setOnAction(e -> onGenerateManifest(entry, latestVersion));
 
         Button removeBtn = new Button("Aus Liste entfernen");
@@ -248,10 +249,10 @@ public class HostModePanel {
         });
 
         Button editBtn = new Button("Einstellungen");
-        editBtn.getStyleClass().addAll("secondary", "actionButton");
+        editBtn.getStyleClass().addAll("secondary");
         editBtn.setOnAction(e -> onEditProject(entry));
 
-        HBox actionsRow = new HBox(10, addModsBtn, openDirBtn, genManifestBtn, editBtn);
+        javafx.scene.layout.FlowPane actionsRow = new javafx.scene.layout.FlowPane(8, 8, addModsBtn, openDirBtn, genManifestBtn, editBtn);
         actionsRow.setAlignment(Pos.CENTER_LEFT);
 
         // === Version Management ===
@@ -279,7 +280,7 @@ public class HostModePanel {
         majorBtn.getStyleClass().addAll("ghost");
         majorBtn.setOnAction(e -> onNewRelease(entry, "major"));
 
-        HBox releaseRow = new HBox(10, patchBtn, minorBtn, majorBtn);
+        javafx.scene.layout.FlowPane releaseRow = new javafx.scene.layout.FlowPane(8, 8, patchBtn, minorBtn, majorBtn);
         releaseRow.setAlignment(Pos.CENTER_LEFT);
 
         // === Version History ===
@@ -317,7 +318,7 @@ public class HostModePanel {
                 if (v.manifestUrl() != null) {
                     Label urlLabel = new Label(v.manifestUrl());
                     urlLabel.setStyle("-fx-text-fill: rgba(238,247,255,0.4); -fx-font-size: 10px;");
-                    urlLabel.setMaxWidth(400);
+                    urlLabel.setMaxWidth(Double.MAX_VALUE);
                     urlLabel.setEllipsisString("…");
                     row.getChildren().add(urlLabel);
                 }
@@ -941,12 +942,6 @@ public class HostModePanel {
                 String baseUrl = entry.baseUrl();
                 if (baseUrl == null || baseUrl.isBlank()) baseUrl = "https://example.com/pack/";
 
-                // For minor/major bumps, we need custom logic
-                if ("patch".equals(bumpType)) {
-                    return mgr.createNextPatchRelease(root, baseUrl);
-                }
-
-                // Read current version and bump accordingly
                 Path versionsJson = root.resolve("versions.json");
                 VersionsIndex idx = om.readValue(versionsJson.toFile(), VersionsIndex.class);
                 String oldVer = idx.latestVersion();
@@ -954,13 +949,13 @@ public class HostModePanel {
 
                 Semver sv = Semver.parse(oldVer);
                 String newVer = switch (bumpType) {
+                    case "patch" -> sv.bumpPatch().toString();
                     case "minor" -> sv.bumpMinor().toString();
                     case "major" -> sv.bumpMajor().toString();
                     default -> sv.bumpPatch().toString();
                 };
 
-                // Similar to HostReleaseManager but with custom version
-                return createRelease(root, baseUrl, oldVer, newVer);
+                return mgr.createRelease(root, baseUrl, oldVer, newVer);
             }
         };
 
@@ -970,7 +965,9 @@ public class HostModePanel {
             setStatus("Release erstellt: " + newVer);
             logger.accept("[HOST] Neues Release: " + newVer + " in " + paths.versionRoot());
 
-            // Refresh the details view
+            // Changelog-Editor anzeigen
+            showChangelogEditor(paths.versionRoot().resolve("changelog.txt"), newVer);
+
             refreshProjectList();
             selectProject(entry.projectId());
         });
@@ -984,6 +981,47 @@ public class HostModePanel {
         Thread t = new Thread(task, "host-release");
         t.setDaemon(true);
         t.start();
+    }
+
+    private void showChangelogEditor(Path changelogPath, String version) {
+        Dialog<String> d = new Dialog<>();
+        d.setTitle("Changelog bearbeiten - v" + version);
+        d.setHeaderText("Automatisch generierter Changelog. Du kannst eigenen Text hinzuf\u00fcgen:");
+        d.setResizable(true);
+
+        ButtonType saveBtn = new ButtonType("Speichern", ButtonBar.ButtonData.OK_DONE);
+        d.getDialogPane().getButtonTypes().addAll(saveBtn, ButtonType.CANCEL);
+
+        String currentText = "";
+        try {
+            if (Files.exists(changelogPath)) currentText = Files.readString(changelogPath);
+        } catch (Exception ignored) {}
+
+        TextArea area = new TextArea(currentText);
+        area.setWrapText(true);
+        area.setPrefRowCount(18);
+        area.setPrefColumnCount(50);
+
+        VBox box = new VBox(8, area);
+        box.setPadding(new Insets(10));
+        d.getDialogPane().setContent(box);
+        d.getDialogPane().setPrefWidth(600);
+
+        String css = getClass().getResource("/de/levingamer8/modlauncher/ui/theme.css").toExternalForm();
+        d.getDialogPane().getStylesheets().add(css);
+        d.getDialogPane().getStyleClass().add("root");
+
+        d.setResultConverter(bt -> bt == saveBtn ? area.getText() : null);
+
+        d.showAndWait().ifPresent(text -> {
+            try {
+                Files.writeString(changelogPath, text);
+                setStatus("Changelog gespeichert: v" + version);
+                logger.accept("[HOST] Changelog gespeichert: " + changelogPath);
+            } catch (Exception ex) {
+                showError("Changelog konnte nicht gespeichert werden:\n" + ex.getMessage());
+            }
+        });
     }
 
     // ======================== MODRINTH SEARCH ========================
@@ -1064,12 +1102,12 @@ public class HostModePanel {
             }
         });
 
-        Button addBtn = new Button("Zum Pack hinzufügen");
-        addBtn.getStyleClass().addAll("primary", "actionButton");
+        Button addBtn = new Button("Zum Pack hinzuf\u00fcgen");
+        addBtn.getStyleClass().addAll("primary");
         addBtn.setDisable(true);
 
         Button genBtn = new Button("Manifest generieren");
-        genBtn.getStyleClass().addAll("secondary", "actionButton");
+        genBtn.getStyleClass().addAll("secondary");
 
         list.getSelectionModel().selectedItemProperty().addListener((obs, o, n) -> addBtn.setDisable(n == null));
         list.setOnMouseClicked(e -> { if (e.getClickCount() == 2) addBtn.fire(); });
@@ -1234,71 +1272,6 @@ public class HostModePanel {
         }
     }
 
-    private HostProjectPaths createRelease(Path projectRoot, String baseUrl,
-                                           String oldVer, String newVer) throws Exception {
-        Path versionsDir = projectRoot.resolve("versions");
-        Path oldDir = versionsDir.resolve(oldVer);
-        Path newDir = versionsDir.resolve(newVer);
-
-        if (!Files.isDirectory(oldDir))
-            throw new IllegalStateException("Alte Version fehlt: " + oldDir);
-        if (Files.exists(newDir))
-            throw new IllegalStateException("Version existiert bereits: " + newDir);
-
-        // Copy
-        copyDir(oldDir, newDir);
-
-        // Update manifest
-        Path manifestPath = newDir.resolve("manifest.json");
-        ManifestModels.Manifest m = om.readValue(manifestPath.toFile(), ManifestModels.Manifest.class);
-
-        String filesBaseUrl = ensureSlash(baseUrl) + "versions/" + newVer + "/files/";
-        Semver sv = Semver.parse(newVer);
-
-        ManifestModels.Manifest updated = new ManifestModels.Manifest(
-                m.packId(), m.packName(), sv.toIntPackVersion(), m.minecraftVersion(),
-                m.loader(), filesBaseUrl, m.files(), m.overrides(),
-                Instant.now().toString(), m.changelogUrl()
-        );
-        om.writeValue(manifestPath.toFile(), updated);
-
-        // Regenerate
-        Path filesDir = newDir.resolve("files");
-        new HostManifestGenerator().generate(manifestPath, filesDir);
-
-        // Update versions.json
-        Path versionsJson = projectRoot.resolve("versions.json");
-        VersionsIndex idx = om.readValue(versionsJson.toFile(), VersionsIndex.class);
-        var list = new java.util.ArrayList<VersionsIndex.VersionEntry>();
-        if (idx.versions() != null) list.addAll(idx.versions());
-        String manifestUrl = ensureSlash(baseUrl) + "versions/" + newVer + "/manifest.json";
-        list.add(new VersionsIndex.VersionEntry(newVer, manifestUrl));
-        list.sort(java.util.Comparator.comparing(e -> Semver.parse(e.version())));
-
-        VersionsIndex newIdx = new VersionsIndex(newVer, list);
-        om.writeValue(versionsJson.toFile(), newIdx);
-
-        return new HostProjectPaths(
-                projectRoot,
-                projectRoot.resolve("project.json"),
-                versionsJson,
-                newDir,
-                manifestPath,
-                filesDir
-        );
-    }
-
-    private static void copyDir(Path src, Path dst) throws Exception {
-        Files.createDirectories(dst);
-        try (var s = Files.walk(src)) {
-            for (Path p : s.toList()) {
-                Path rel = src.relativize(p);
-                Path t = dst.resolve(rel);
-                if (Files.isDirectory(p)) Files.createDirectories(t);
-                else Files.copy(p, t, java.nio.file.StandardCopyOption.COPY_ATTRIBUTES);
-            }
-        }
-    }
 
     private void setStatus(String text) {
         Platform.runLater(() -> { if (statusLabel != null) statusLabel.setText(text); });
@@ -1318,7 +1291,7 @@ public class HostModePanel {
     private static void addTooltip(Node node, String text) {
         Tooltip tp = new Tooltip(text);
         tp.setWrapText(true);
-        tp.setMaxWidth(300);
+        tp.setMaxWidth(450);
         Tooltip.install(node, tp);
     }
 

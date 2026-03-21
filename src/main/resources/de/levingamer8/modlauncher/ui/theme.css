@@ -63,8 +63,8 @@
 .version { -fx-text-fill: rgba(238,242,255,0.55); -fx-font-size: 13px; }
 
 /* ===== Layout ===== */
-.topbar { -fx-padding: 16 18 12 18; }
-.contentRoot { -fx-padding: 22; }
+.topbar { -fx-padding: 10 18 8 18; }
+.contentRoot { -fx-padding: 14 18 14 18; }
 .pad16 { -fx-padding: 16; }
 .hGap10 { -fx-spacing: 10; }
 .vGap10 { -fx-spacing: 10; }
@@ -112,6 +112,26 @@
 /* ComboBox: Text darf nicht geclippt werden */
 .combo-box-base {
     -fx-padding: 0 12 0 12;
+}
+
+/* ComboBox popup: dark styled, no overlap issues */
+.combo-box-popup .list-view {
+    -fx-background-color: rgba(15, 20, 28, 0.96);
+    -fx-border-color: rgba(0,255,255,0.25);
+    -fx-border-radius: 10;
+    -fx-background-radius: 10;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.50), 16, 0.40, 0, 6);
+}
+.combo-box-popup .list-cell {
+    -fx-background-color: transparent;
+    -fx-text-fill: -text;
+    -fx-padding: 8 12 8 12;
+}
+.combo-box-popup .list-cell:hover {
+    -fx-background-color: rgba(0,255,255,0.10);
+}
+.combo-box-popup .list-cell:selected {
+    -fx-background-color: rgba(0,255,255,0.18);
 }
 
 /* ButtonCell + ListCell sauber zentrieren */
@@ -163,7 +183,70 @@
 
 .button:pressed { -fx-scale-x: 0.98; -fx-scale-y: 0.98; }
 
-.actionButton { -fx-min-width: 140px; }
+.actionButton { -fx-min-width: 100px; }
+
+/* Topbar buttons: compact, auto-sized to text */
+.topbarBtn {
+    -fx-padding: 8 10 8 10;
+    -fx-font-size: 12px;
+}
+
+/* Account card: tighter padding */
+.accountCard {
+    -fx-padding: 8 10 8 10;
+}
+
+/* Play button: wider, prominent */
+.playBtn {
+    -fx-min-width: 120px;
+    -fx-padding: 10 28 10 28;
+}
+
+/* MenuButton: hamburger style */
+.menu-button.topbarBtn {
+    -fx-font-size: 14px;
+    -fx-padding: 6 12 6 12;
+    -fx-background-color: rgba(255,255,255,0.06);
+    -fx-border-color: rgba(255,255,255,0.12);
+    -fx-text-fill: -text;
+}
+.menu-button.topbarBtn:hover {
+    -fx-background-color: rgba(0,255,255,0.10);
+    -fx-border-color: rgba(0,255,255,0.35);
+    -fx-effect: dropshadow(gaussian, rgba(0,255,255,0.18), 16, 0.30, 0, 0);
+}
+.menu-button.topbarBtn .arrow {
+    -fx-background-color: -text;
+    -fx-shape: "M2 6l6 6 6-6";
+    -fx-scale-x: 0.7;
+    -fx-scale-y: 0.7;
+    -fx-padding: 3 3 3 3;
+}
+
+/* Context menu (MenuButton dropdown) */
+.context-menu {
+    -fx-background-color: rgba(15, 20, 28, 0.96);
+    -fx-border-color: rgba(0,255,255,0.20);
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-padding: 6;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.50), 20, 0.40, 0, 8);
+}
+.context-menu .menu-item {
+    -fx-padding: 8 16 8 16;
+    -fx-background-radius: 8;
+}
+.context-menu .menu-item .label {
+    -fx-text-fill: -text;
+}
+.context-menu .menu-item:hover,
+.context-menu .menu-item:focused {
+    -fx-background-color: rgba(0,255,255,0.10);
+}
+.context-menu .separator .line {
+    -fx-border-color: rgba(255,255,255,0.08);
+    -fx-border-width: 1 0 0 0;
+}
 
 /* Global cyan hover for ALL buttons */
 .button:hover{
@@ -388,9 +471,13 @@
 .dialog-pane {
     -fx-background-color:
             linear-gradient(to bottom, #0d1117, #0a0d12);
+    -fx-min-width: 420px;
 }
 .dialog-pane .content {
     -fx-background-color: transparent;
+}
+.dialog-pane .content .label {
+    -fx-wrap-text: true;
 }
 .dialog-pane .header-panel {
     -fx-background-color: rgba(255,255,255,0.03);

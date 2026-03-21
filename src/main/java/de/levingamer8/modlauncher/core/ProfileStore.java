@@ -16,8 +16,14 @@ public class ProfileStore {
             String manifestUrl,
             String serverHost,
             int serverPort,
-            JoinMode joinMode
-    ) {}
+            JoinMode joinMode,
+            int ramMb
+    ) {
+        /** Gibt den effektiven RAM zurück: Profil-Wert wenn > 0, sonst globaler Default. */
+        public int effectiveRamMb() {
+            return ramMb > 0 ? ramMb : de.levingamer8.modlauncher.ui.dialogs.LauncherSettings.getRamMb();
+        }
+    }
 
     private final Path baseDir;
     private final Path profilesFile;

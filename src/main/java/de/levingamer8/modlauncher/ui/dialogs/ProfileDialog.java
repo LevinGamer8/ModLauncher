@@ -25,7 +25,8 @@ public class ProfileDialog {
                 "",
                 "",
                 25565,
-                ProfileStore.JoinMode.SERVERS_DAT
+                ProfileStore.JoinMode.SERVERS_DAT,
+                0
         );
         return showInternal("Neue Instanz", "Erstellen", base, null);
     }
@@ -56,6 +57,14 @@ public class ProfileDialog {
             @Override public ProfileStore.JoinMode fromString(String s) { return null; }
         });
 
+        int defaultRam = LauncherSettings.getRamMb();
+        int currentRam = initial.ramMb() > 0 ? initial.ramMb() : defaultRam;
+        javafx.scene.control.Spinner<Integer> ramSpinner = new javafx.scene.control.Spinner<>(512, 65536, currentRam, 512);
+        ramSpinner.setEditable(true);
+        Label ramHint = new Label("(0 = Default: " + defaultRam + " MB)");
+        ramHint.getStyleClass().add("mutedSmall");
+        HBox ramRow = new HBox(8, ramSpinner, ramHint);
+
         // Test UI
         Button testBtn = new Button("Testen");
         ProgressIndicator pi = new ProgressIndicator();
@@ -64,8 +73,9 @@ public class ProfileDialog {
 
         Label testStatus = new Label();
         testStatus.setMinHeight(18);
-        testStatus.setMaxWidth(360);
         testStatus.setWrapText(true);
+        testStatus.setMaxWidth(Double.MAX_VALUE);
+        HBox.setHgrow(testStatus, Priority.ALWAYS);
 
         HBox testRow = new HBox(10, testBtn, pi, testStatus);
 
@@ -81,6 +91,7 @@ public class ProfileDialog {
         gp.addRow(r++, new Label("Server Host:"), host);
         gp.addRow(r++, new Label("Server Port:"), port);
         gp.addRow(r++, new Label("Join Mode:"), joinMode);
+        gp.addRow(r++, new Label("RAM (MB):"), ramRow);
 
         ColumnConstraints c1 = new ColumnConstraints();
         c1.setMinWidth(110);
@@ -89,6 +100,7 @@ public class ProfileDialog {
         gp.getColumnConstraints().setAll(c1, c2);
 
         dialog.getDialogPane().setContent(gp);
+        dialog.getDialogPane().setMinWidth(520);
 
         Node okNode = dialog.getDialogPane().lookupButton(okBtn);
         okNode.setDisable(true);
@@ -186,7 +198,8 @@ public class ProfileDialog {
                     url.getText().trim(),
                     host.getText().trim(),
                     p,
-                    joinMode.getValue()
+                    joinMode.getValue(),
+                    ramSpinner.getValue()
             );
 
             return new ProfileDialogResult(prof, oldNameOrNull);

@@ -24,6 +24,11 @@ public class HostReleaseManager {
 
         String newVer = Semver.parse(oldVer).bumpPatch().toString();
 
+        return createRelease(projectRoot, baseUrl, oldVer, newVer);
+    }
+
+    public HostProjectPaths createRelease(Path projectRoot, String baseUrl,
+                                          String oldVer, String newVer) throws Exception {
         Path versionsDir = projectRoot.resolve("versions");
         Path oldDir = versionsDir.resolve(oldVer);
         Path newDir = versionsDir.resolve(newVer);
@@ -34,11 +39,19 @@ public class HostReleaseManager {
         // 1) copy
         copyDir(oldDir, newDir);
 
-        // 2) update manifest baseUrl + packVersion + generatedAt (im neuen manifest!)
+        // 2) Auto-Changelog generieren (alt vs. neu vergleichen)
+        Path oldFilesDir = oldDir.resolve("files");
+        Path newFilesDir = newDir.resolve("files");
+        String autoChangelog = ChangelogGenerator.generate(oldFilesDir, newFilesDir, newVer);
+        Path changelogPath = newDir.resolve("changelog.txt");
+        Files.writeString(changelogPath, autoChangelog);
+
+        // 3) update manifest baseUrl + packVersion + generatedAt + changelogUrl
         Path manifestPath = newDir.resolve("manifest.json");
         ManifestModels.Manifest m = om.readValue(manifestPath.toFile(), ManifestModels.Manifest.class);
 
         String filesBaseUrl = ensureSlash(baseUrl) + "versions/" + newVer + "/files/";
+        String changelogUrl = ensureSlash(baseUrl) + "versions/" + newVer + "/changelog.txt";
         Semver sv = Semver.parse(newVer);
 
         ManifestModels.Manifest updated = new ManifestModels.Manifest(
@@ -51,15 +64,16 @@ public class HostReleaseManager {
                 m.files(),
                 m.overrides(),
                 Instant.now().toString(),
-                m.changelogUrl()
+                changelogUrl
         );
         om.writeValue(manifestPath.toFile(), updated);
 
-        // 3) regenerate files list (hashes+urls) based on newDir/files
-        Path filesDir = newDir.resolve("files");
-        manifestGen.generate(manifestPath, filesDir);
+        // 4) regenerate files list (hashes+urls) based on newDir/files
+        manifestGen.generate(manifestPath, newFilesDir);
 
-        // 4) update versions.json
+        // 5) update versions.json
+        Path versionsJson = projectRoot.resolve("versions.json");
+        VersionsIndex idx = om.readValue(versionsJson.toFile(), VersionsIndex.class);
         List<VersionsIndex.VersionEntry> list = new ArrayList<>();
         if (idx.versions() != null) list.addAll(idx.versions());
         String manifestUrl = ensureSlash(baseUrl) + "versions/" + newVer + "/manifest.json";
@@ -75,7 +89,7 @@ public class HostReleaseManager {
                 versionsJson,
                 newDir,
                 manifestPath,
-                filesDir
+                newFilesDir
         );
     }
 

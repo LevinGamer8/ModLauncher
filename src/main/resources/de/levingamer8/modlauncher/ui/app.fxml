@@ -12,13 +12,13 @@
             fx:controller="de.levingamer8.modlauncher.ui.Controller"
             styleClass="root">
 
-    <!-- TOP BAR: Left title | Center global actions | Right account -->
+    <!-- TOP BAR: clean, minimal -->
     <top>
-        <HBox styleClass="topbar" alignment="CENTER_LEFT" spacing="14">
-            <!-- Left -->
-            <VBox spacing="2">
+        <HBox styleClass="topbar" alignment="CENTER_LEFT" spacing="12">
+            <!-- Left: Title -->
+            <VBox spacing="1">
                 <Label text="%app.title" styleClass="h1"/>
-                <HBox spacing="8" alignment="CENTER_LEFT">
+                <HBox spacing="6" alignment="CENTER_LEFT">
                     <Label text="%app.madeBy" styleClass="mutedSmall"/>
                     <Label fx:id="versionLabel" styleClass="version"/>
                 </HBox>
@@ -26,51 +26,45 @@
 
             <Region HBox.hgrow="ALWAYS"/>
 
-            <!-- Center: Global actions -->
-            <HBox spacing="10" alignment="CENTER">
-                <Button fx:id="launcherUpdateButton"
-                        text="%btn.launcherUpdate"
-                        onAction="#onLauncherUpdate"
-                        styleClass="ghost actionButton"/>
-
-                <Button fx:id="openMainFolderButton"
-                        text="%btn.openMainFolder"
-                        onAction="#onOpenMainFolder"
-                        styleClass="ghost actionButton"/>
-
-                <Button fx:id="hostModeButton"
-                        text="%btn.hostMode"
-                        onAction="#onHostMode"
-                        styleClass="ghost actionButton"/>
-
-                <Button fx:id="settingsButton"
-                        text="%btn.settings"
-                        onAction="#onOpenSettings"
-                        styleClass="ghost actionButton"/>
-            </HBox>
+            <!-- Center: Status + Progress -->
+            <VBox alignment="CENTER" spacing="4">
+                <HBox spacing="8" alignment="CENTER">
+                    <Label fx:id="globalPlaytimeLabel" text="%playtime.totalDefault" styleClass="mutedSmall"/>
+                    <Label fx:id="statusLabel" text="%status.ready" styleClass="pillOk"/>
+                </HBox>
+                <ProgressBar fx:id="progressBar" visible="false" progress="-1" styleClass="progressSlim" prefWidth="200"/>
+            </VBox>
 
             <Region HBox.hgrow="ALWAYS"/>
 
-            <!-- Right: Account widget -->
-            <HBox spacing="12" alignment="CENTER_RIGHT">
-                <VBox alignment="CENTER_RIGHT" spacing="6">
-                    <HBox spacing="8" alignment="CENTER_RIGHT">
-                        <Label fx:id="globalPlaytimeLabel" text="%playtime.totalDefault" styleClass="mutedSmall"/>
-                        <Label fx:id="statusLabel" text="%status.ready" styleClass="pillOk"/>
-                    </HBox>
-                    <ProgressBar fx:id="progressBar" visible="false" progress="-1" styleClass="progressSlim"/>
-                </VBox>
+            <!-- Right: Menu + Account -->
+            <HBox spacing="8" alignment="CENTER_RIGHT">
+                <!-- Compact menu for actions -->
+                <MenuButton fx:id="menuButton" styleClass="ghost topbarBtn">
+                    <graphic>
+                        <SVGPath content="M3 6h18 M3 12h18 M3 18h18"
+                                 style="-fx-stroke: #eef7ff; -fx-stroke-width: 2; -fx-fill: transparent; -fx-stroke-line-cap: round;"/>
+                    </graphic>
+                    <items>
+                        <MenuItem text="%btn.launcherUpdate" onAction="#onLauncherUpdate"/>
+                        <MenuItem text="%btn.openMainFolder" onAction="#onOpenMainFolder"/>
+                        <MenuItem text="%btn.hostMode" onAction="#onHostMode"/>
+                        <SeparatorMenuItem/>
+                        <MenuItem text="%btn.settings" onAction="#onOpenSettings"/>
+                    </items>
+                </MenuButton>
 
-                <HBox spacing="10" alignment="CENTER_RIGHT" styleClass="card">
+                <!-- Account -->
+                <HBox spacing="6" alignment="CENTER_RIGHT" styleClass="card accountCard">
                     <ImageView fx:id="skinView" fitWidth="28" fitHeight="28" preserveRatio="true" smooth="true"/>
-                    <VBox spacing="2">
+                    <VBox spacing="1">
                         <Label fx:id="accountNameLabel" text="" styleClass="sectionTitle"/>
                         <Label fx:id="loginStatusLabel" text="%account.notLoggedIn" styleClass="mutedSmall"/>
                     </VBox>
                     <Button fx:id="loginButton"
                             text="%btn.loginMicrosoft"
                             onAction="#onAccountButton"
-                            styleClass="secondary"/>
+                            styleClass="secondary topbarBtn"/>
                 </HBox>
             </HBox>
         </HBox>
@@ -85,15 +79,15 @@
                 <HBox spacing="16" styleClass="contentRoot">
 
                     <!-- INSTANCE AREA (center focus) -->
-                    <VBox spacing="14" HBox.hgrow="ALWAYS">
+                    <VBox spacing="12" HBox.hgrow="ALWAYS">
 
-                        <!-- Instance control card -->
-                        <VBox styleClass="card" spacing="12">
-                            <HBox alignment="CENTER_LEFT" spacing="10">
+                        <!-- Instance control: compact -->
+                        <VBox styleClass="card" spacing="10">
+                            <!-- Header row: title + icons -->
+                            <HBox alignment="CENTER_LEFT" spacing="8">
                                 <Label text="%section.instance" styleClass="sectionTitle"/>
                                 <Region HBox.hgrow="ALWAYS"/>
 
-                                <!-- Profile action icons -->
                                 <Button onAction="#onNewProfile" styleClass="iconBtn">
                                     <graphic>
                                         <SVGPath content="M12 5v14 M5 12h14"
@@ -127,33 +121,32 @@
                                 </Button>
                             </HBox>
 
-                            <!-- Instance selector -->
-                            <ComboBox fx:id="profileCombo" maxWidth="1.7976931348623157E308"/>
-
-                            <!-- Instance selector + playtime -->
+                            <!-- Selector + Playtime in one row -->
                             <HBox spacing="10" alignment="CENTER_LEFT">
+                                <ComboBox fx:id="profileCombo" HBox.hgrow="ALWAYS" maxWidth="1.7976931348623157E308"/>
                                 <Label fx:id="instancePlaytimeLabel" text="%playtime.instanceDefault" styleClass="mutedSmall"/>
                             </HBox>
 
-                            <!-- Main instance actions -->
-                            <HBox spacing="10">
+                            <!-- Actions row -->
+                            <HBox spacing="8" alignment="CENTER_LEFT">
                                 <Button fx:id="updateButton"
                                         text="%btn.modpackUpdate"
                                         onAction="#onUpdate"
-                                        styleClass="secondary actionButton"/>
+                                        styleClass="secondary"/>
                                 <Button fx:id="openFolderButton"
                                         text="%btn.instanceFolder"
                                         onAction="#onOpenFolder"
-                                        styleClass="ghost actionButton"/>
+                                        styleClass="ghost"/>
+                                <Region HBox.hgrow="ALWAYS"/>
                                 <Button fx:id="playButton"
                                         text="%btn.start"
                                         onAction="#onPlay"
-                                        styleClass="primaryBig actionButton" HBox.hgrow="ALWAYS"/>
+                                        styleClass="primaryBig playBtn"/>
                             </HBox>
                         </VBox>
 
-                        <!-- Übersicht -->
-                        <VBox styleClass="card" spacing="10" VBox.vgrow="ALWAYS">
+                        <!-- Overview tabs -->
+                        <VBox styleClass="card" spacing="8" VBox.vgrow="ALWAYS">
                             <HBox alignment="CENTER_LEFT" spacing="10">
                                 <Label text="%section.overview" styleClass="sectionTitle"/>
                                 <Region HBox.hgrow="ALWAYS"/>
@@ -171,33 +164,29 @@
 
                                     <Tab text="%tab.server">
                                         <VBox spacing="10" styleClass="pad16" VBox.vgrow="ALWAYS">
-
                                             <HBox spacing="10" alignment="CENTER_LEFT">
-                                                <Label text="%server.status" styleClass="mutedSmall"/>
+                                                <Label text="%server.status" styleClass="mutedSmall" minWidth="60"/>
                                                 <Label fx:id="serverStatusLabel" text="%server.unknown" styleClass="pillError"/>
                                             </HBox>
-
                                             <HBox spacing="10" alignment="CENTER_LEFT">
-                                                <Label text="%server.players" styleClass="mutedSmall"/>
+                                                <Label text="%server.players" styleClass="mutedSmall" minWidth="60"/>
                                                 <Label fx:id="serverPlayersLabel" text="-" styleClass="muted"/>
                                             </HBox>
-
                                             <HBox spacing="10" alignment="CENTER_LEFT">
-                                                <Label text="%server.ping" styleClass="mutedSmall"/>
+                                                <Label text="%server.ping" styleClass="mutedSmall" minWidth="60"/>
                                                 <Label fx:id="serverPingLabel" text="-" styleClass="muted"/>
                                             </HBox>
-
                                             <Label fx:id="serverDetailsLabel"
                                                    text="%server.noCheckYet"
+                                                   wrapText="true"
                                                    styleClass="muted"/>
                                         </VBox>
                                     </Tab>
 
                                     <Tab text="%tab.modpack">
                                         <VBox spacing="10" styleClass="pad16" VBox.vgrow="ALWAYS">
-                                            <Label fx:id="packInfoLabel"
-                                                   text="%modpack.infoPlaceholder"
-                                                   styleClass="muted"/>
+                                            <TextArea fx:id="packInfoArea" editable="false" wrapText="true"
+                                                      styleClass="logArea" VBox.vgrow="ALWAYS"/>
                                         </VBox>
                                     </Tab>
                                 </tabs>
@@ -214,8 +203,8 @@
                             <VBox styleClass="card" spacing="10">
                                 <HBox alignment="CENTER_LEFT" spacing="10">
                                     <Region HBox.hgrow="ALWAYS"/>
-                                    <Button text="%btn.copy" onAction="#onCopyLog" styleClass="ghost actionButton"/>
-                                    <Button text="%btn.clear" onAction="#onClearLog" styleClass="ghostDanger actionButton"/>
+                                    <Button text="%btn.copy" onAction="#onCopyLog" styleClass="ghost"/>
+                                    <Button text="%btn.clear" onAction="#onClearLog" styleClass="ghostDanger"/>
                                 </HBox>
 
                                 <TextArea fx:id="logArea"
